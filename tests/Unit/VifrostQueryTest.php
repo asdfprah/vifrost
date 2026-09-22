@@ -37,12 +37,14 @@ it('aborts with 404 when the parent id does not exist', function () {
     vifrostQueryFor('api/category/999999/products');
 })->throws(NotFoundHttpException::class);
 
-it('aborts with 404 when a relation is requested without an id first', function () {
-    vifrostQueryFor('api/category/products');
-})->throws(NotFoundHttpException::class);
-
 it('resolves a flat show route to a query builder scoped by id', function () {
     $query = vifrostQueryFor('api/product/' . $this->product->id);
+
+    expect($query)->toBeInstanceOf(Builder::class);
+});
+
+it('resolves a flat show route whose id is not numeric (e.g. a UUID/ULID primary key)', function () {
+    $query = vifrostQueryFor('api/product/01ARZ3NDEKTSV4RRFFQ69G5FAV');
 
     expect($query)->toBeInstanceOf(Builder::class);
 });
@@ -62,9 +64,11 @@ it('resolves one record within a nested relation, scoped by its own id', functio
     expect($query)->toBeInstanceOf(Relation::class);
 });
 
-it('aborts with 404 when a nested show id is not numeric', function () {
-    vifrostQueryFor('api/category/' . $this->category->id . '/products/not-a-number');
-})->throws(NotFoundHttpException::class);
+it('resolves a nested show route whose id is not numeric (e.g. a UUID/ULID primary key)', function () {
+    $query = vifrostQueryFor('api/category/' . $this->category->id . '/products/01ARZ3NDEKTSV4RRFFQ69G5FAV');
+
+    expect($query)->toBeInstanceOf(Relation::class);
+});
 
 it('aborts with 404 for a relation of a relation (more than one hop)', function () {
     vifrostQueryFor('api/category/' . $this->category->id . '/products/' . $this->product->id . '/comments');

@@ -124,9 +124,6 @@ class Vifrost
             return $query;
         }
 
-        if (!is_numeric($path[1])) {
-            abort(404);
-        }
         $query = $query->where('id', $path[1]);
 
         if (count($path) === 2) {
@@ -144,9 +141,6 @@ class Vifrost
             return $relation;
         }
 
-        if (!is_numeric($path[3])) {
-            abort(404);
-        }
         return $relation->where('id', $path[3]);
     }
 
