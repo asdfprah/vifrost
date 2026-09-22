@@ -1,3 +1,10 @@
+## [0.4.0](https://github.com/asdfprah/vifrost/compare/v0.3.0...v0.4.0) (2026-09-22)
+
+### Features
+
+* **laravel:** added ulid uuid compatibility ([8df9159](https://github.com/asdfprah/vifrost/commit/8df91597dd1091ca7255e042a55bdadfe610457f))
+* **laravel:** implemented models cache ([fb8e738](https://github.com/asdfprah/vifrost/commit/fb8e73889aef296c01f02e31f462e0e099f5e5c9))
+
 ## [0.3.0](https://github.com/asdfprah/vifrost/compare/v0.2.0...v0.3.0) (2026-09-12)
 
 ### Features
