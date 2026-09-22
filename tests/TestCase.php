@@ -24,7 +24,7 @@ abstract class TestCase extends Orchestra
         // for PostgresTypeMappingTest, which specifically checks Postgres's own
         // type-name aliases (int8, float8, bool, uuid, ...) regardless of which driver
         // the main suite is targeting in this CI leg.
-        if(getenv('PGSQL_TEST_HOST')){
+        if (getenv('PGSQL_TEST_HOST')) {
             $app['config']->set('database.connections.pgsql_test', [
                 'driver' => 'pgsql',
                 'host' => getenv('PGSQL_TEST_HOST'),
@@ -38,7 +38,7 @@ abstract class TestCase extends Orchestra
         // Same idea, for MariaDbJsonLimitationTest: MariaDB reports a json() column as
         // "longtext" (it's a LONGTEXT + CHECK constraint under the hood, not a real
         // native JSON type), which this package cannot recover from schema introspection.
-        if(getenv('MARIADB_TEST_HOST')){
+        if (getenv('MARIADB_TEST_HOST')) {
             $app['config']->set('database.connections.mariadb_test', [
                 'driver' => 'mariadb',
                 'host' => getenv('MARIADB_TEST_HOST'),
@@ -49,14 +49,11 @@ abstract class TestCase extends Orchestra
             ]);
         }
 
-        // Vifrost::models() scans app_path() under the app's root namespace to
-        // find Eloquent models. Point both at tests/Fixtures so the package can
-        // "see" our fixture models the same way it would see a real app's models,
-        // without needing a full sandboxed Laravel app on disk.
-        $app->useAppPath(__DIR__.'/Fixtures');
+        $app->useAppPath(__DIR__ . '/Fixtures');
         $namespace = new ReflectionProperty($app, 'namespace');
         $namespace->setAccessible(true);
         $namespace->setValue($app, 'Vifrost\\Laravel\\Tests\\Fixtures\\');
+        $app['config']->set('vifrost.models_path', '');
     }
 
     /**
@@ -80,15 +77,15 @@ abstract class TestCase extends Orchestra
             ];
         }
 
-        $prefix = strtoupper($driver).'_TEST_';
+        $prefix = strtoupper($driver) . '_TEST_';
 
         return [
             'driver' => $driver,
-            'host' => getenv($prefix.'HOST') ?: '127.0.0.1',
-            'port' => getenv($prefix.'PORT') ?: ($driver === 'pgsql' ? 5432 : 3306),
-            'database' => getenv($prefix.'DATABASE') ?: 'vifrost_test',
-            'username' => getenv($prefix.'USERNAME') ?: 'root',
-            'password' => getenv($prefix.'PASSWORD') ?: '',
+            'host' => getenv($prefix . 'HOST') ?: '127.0.0.1',
+            'port' => getenv($prefix . 'PORT') ?: ($driver === 'pgsql' ? 5432 : 3306),
+            'database' => getenv($prefix . 'DATABASE') ?: 'vifrost_test',
+            'username' => getenv($prefix . 'USERNAME') ?: 'root',
+            'password' => getenv($prefix . 'PASSWORD') ?: '',
         ];
     }
 }

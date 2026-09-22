@@ -47,6 +47,11 @@ return [
     // Directories under app/Models excluded when generating for "all" models.
     'exclude' => ['api'],
 
+    // Where Vifrost::models() looks for Eloquent models, relative to app_path().
+    // Scanned live on every call unless `php artisan vifrost:cache` has written a
+    // cache file — see "Caching discovered models" below.
+    'models_path' => 'Models',
+
     // Where `php artisan vifrost:schema` writes the models/attributes/relations JSON.
     'schema_path' => storage_path('app/vifrost-schema.json'),
 
@@ -155,6 +160,26 @@ Writes a JSON map of every model's table, resource name, `maxLimit`, columns
 `@vifrost/codegen` (part 2) reads to generate typed model classes. If
 `expose_schema_route` is enabled, the same JSON is served live at
 `schema_route_path` (`api/_schema` by default) instead of needing the file.
+
+### Caching discovered models
+
+`Vifrost::models()` (used by every generated controller to resolve `{model}` in a URL,
+and by `vifrost:api`/`vifrost:schema` to find "all" models) scans `models_path` and
+reflects on every file it finds there, on every call — fine for a handful of models
+locally, wasteful on a production request. Nothing is cached by default; opt in with:
+
+```bash
+php artisan vifrost:cache   # write bootstrap/cache/vifrost-models.php
+php artisan vifrost:clear   # remove it, restoring the live scan
+```
+
+This follows the same manually-invalidated convention as `config:cache`/`route:cache`:
+once a cache file exists, `models()` reads it instead of scanning — so re-run
+`vifrost:cache` after adding, removing, or moving a model, the same way you'd re-run
+`config:cache` after editing `.env`. There's no automatic invalidation (a model added
+by hand, or by any tool other than vifrost's own generators, wouldn't be visible to
+trigger one anyway), so add `vifrost:cache` to your deploy step deliberately if you
+use it, rather than relying on it locally.
 
 ---
 

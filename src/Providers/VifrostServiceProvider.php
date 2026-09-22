@@ -2,6 +2,8 @@
 
 namespace Vifrost\Laravel\Providers;
 
+use Vifrost\Laravel\Commands\CacheModelsCommand;
+use Vifrost\Laravel\Commands\ClearModelsCacheCommand;
 use Vifrost\Laravel\Commands\MakeAPICommand;
 use Vifrost\Laravel\Commands\MakeControllerCommand;
 use Vifrost\Laravel\Commands\MakeRequestCommand;
@@ -38,6 +40,8 @@ class VifrostServiceProvider extends ServiceProvider
                 MakeControllerCommand::class,
                 MakeAPICommand::class,
                 SchemaCommand::class,
+                CacheModelsCommand::class,
+                ClearModelsCacheCommand::class,
             ]);
         }
 
