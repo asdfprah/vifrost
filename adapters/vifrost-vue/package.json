@@ -5,29 +5,38 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/asdfprah/vifrost.git",
     "directory": "adapters/vifrost-vue"
   },
-  "publishConfig": { "access": "public" },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest"
   },
-  "keywords": ["laravel", "vifrost", "vue", "composables"],
+  "keywords": [
+    "laravel",
+    "vifrost",
+    "vue",
+    "composables"
+  ],
   "license": "MIT",
   "peerDependencies": {
-    "@vifrost/client": "^0.1.0",
+    "@vifrost/client": "^0.2.0",
     "vue": "^3.3.0"
   },
   "devDependencies": {
-    "@vifrost/client": "^0.1.0",
-    "vue": "^3.5.0",
+    "@types/node": "^20.0.0",
+    "@vifrost/client": "^0.2.0",
     "typescript": "^5.5.0",
     "vitest": "^2.0.0",
-    "@types/node": "^20.0.0"
+    "vue": "^3.5.0"
   }
 }
