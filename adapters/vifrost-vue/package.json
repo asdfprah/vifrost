@@ -1,6 +1,6 @@
 {
   "name": "@vifrost/vue",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Vue composables (useModel, useQuery) for @vifrost/client, kept in sync with the Registry identity map.",
   "type": "module",
   "main": "./dist/index.js",
