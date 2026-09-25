@@ -32,13 +32,28 @@ describe('HttpClient', () => {
     })
   })
 
+  it('resolves { body, headers } — never a bare body — so headers are always reachable', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify([{ id: 1 }]), {
+        status: 200,
+        headers: { 'content-type': 'application/json', 'X-Total-Count': '21' },
+      })
+    )
+    const client = new HttpClient({ baseUrl: 'https://api.test', fetch: fetchMock })
+
+    const { body, headers } = await client.get<{ id: number }[]>('product')
+
+    expect(body).toEqual([{ id: 1 }])
+    expect(headers.get('X-Total-Count')).toBe('21')
+  })
+
   it('parses a JSON response body', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ id: 1, name: 'Gadget' }))
     const client = new HttpClient({ baseUrl: 'https://api.test', fetch: fetchMock })
 
-    const result = await client.get<{ id: number; name: string }>('product/1')
+    const { body } = await client.get<{ id: number; name: string }>('product/1')
 
-    expect(result).toEqual({ id: 1, name: 'Gadget' })
+    expect(body).toEqual({ id: 1, name: 'Gadget' })
   })
 
   it('throws HttpError with the status and parsed body on a non-2xx response', async () => {
@@ -82,7 +97,7 @@ describe('HttpClient', () => {
 
     try {
       const client = new HttpClient({ baseUrl: 'https://api.test' })
-      await expect(client.get('product')).resolves.toEqual({ ok: true })
+      await expect(client.get('product')).resolves.toMatchObject({ body: { ok: true } })
     } finally {
       globalThis.fetch = original
     }

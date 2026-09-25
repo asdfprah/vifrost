@@ -1,5 +1,5 @@
 import { HttpError } from './HttpError.js'
-import type { HttpClientOptions } from './types.js'
+import type { HttpClientOptions, HttpResponse } from './types.js'
 
 /**
  * Thin fetch wrapper shared by every {@link Model} request.
@@ -29,7 +29,7 @@ export class HttpClient {
     this.fetchImplementation = fetchImplementation
   }
 
-  async request<ResponseBody>(path: string, init: RequestInit = {}): Promise<ResponseBody> {
+  async request<ResponseBody>(path: string, init: RequestInit = {}): Promise<HttpResponse<ResponseBody>> {
     const isAbsoluteUrl = /^https?:\/\//.test(path)
     const url = isAbsoluteUrl ? path : `${this.baseUrl}/${path.replace(/^\/+/, '')}`
 
@@ -45,22 +45,22 @@ export class HttpClient {
       throw new HttpError(response.status, responseBody)
     }
 
-    return responseBody as ResponseBody
+    return { body: responseBody as ResponseBody, headers: response.headers }
   }
 
-  get<ResponseBody>(path: string): Promise<ResponseBody> {
+  get<ResponseBody>(path: string): Promise<HttpResponse<ResponseBody>> {
     return this.request<ResponseBody>(path, { method: 'GET' })
   }
 
-  post<ResponseBody>(path: string, requestBody?: unknown): Promise<ResponseBody> {
+  post<ResponseBody>(path: string, requestBody?: unknown): Promise<HttpResponse<ResponseBody>> {
     return this.request<ResponseBody>(path, { method: 'POST', body: JSON.stringify(requestBody ?? {}) })
   }
 
-  put<ResponseBody>(path: string, requestBody?: unknown): Promise<ResponseBody> {
+  put<ResponseBody>(path: string, requestBody?: unknown): Promise<HttpResponse<ResponseBody>> {
     return this.request<ResponseBody>(path, { method: 'PUT', body: JSON.stringify(requestBody ?? {}) })
   }
 
-  delete<ResponseBody>(path: string): Promise<ResponseBody> {
+  delete<ResponseBody>(path: string): Promise<HttpResponse<ResponseBody>> {
     return this.request<ResponseBody>(path, { method: 'DELETE' })
   }
 }

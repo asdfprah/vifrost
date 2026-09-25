@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { configure, resetClient } from '../src/config.js'
 import { Model } from '../src/Model.js'
+import type { ModelCollection } from '../src/ModelCollection.js'
 import { Registry } from '../src/Registry.js'
 
 class Category extends Model {
@@ -8,7 +9,7 @@ class Category extends Model {
   declare id: number
   declare name: string
 
-  products(): Promise<Product[]> {
+  products(): Promise<ModelCollection<Product>> {
     return this.toMany('products', Product)
   }
 
@@ -46,6 +47,13 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { 'content-type': 'application/json' },
+  })
+}
+
+function jsonResponseWithTotal(body: unknown, total: number): Response {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { 'content-type': 'application/json', 'X-Total-Count': String(total) },
   })
 }
 
@@ -101,6 +109,32 @@ describe('Model static queries (no registry configured)', () => {
 
     expect(fetchMock).toHaveBeenCalledWith('https://api.test/product/7', expect.any(Object))
     expect(product).toBeInstanceOf(Product)
+  })
+
+  it('all()/query().get() populate .total from the X-Total-Count response header', async () => {
+    fetchMock.mockResolvedValue(jsonResponseWithTotal([{ id: 1, name: 'Widgets' }], 21))
+
+    const categories = await Category.all()
+
+    expect(categories.total).toBe(21)
+    expect(categories).toHaveLength(1)
+  })
+
+  it('.total falls back to the page size when X-Total-Count is missing', async () => {
+    fetchMock.mockResolvedValue(jsonResponse([{ id: 1 }, { id: 2 }]))
+
+    const categories = await Category.all()
+
+    expect(categories.total).toBe(2)
+  })
+
+  it('query().whereId(id).get() wraps the single row in a collection with total: 1', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ id: 7, name: 'Gadget' }))
+
+    const products = await Product.query().whereId(7).get()
+
+    expect(products.total).toBe(1)
+    expect(products[0]).toBeInstanceOf(Product)
   })
 })
 
@@ -232,6 +266,17 @@ describe('Model relation helpers', () => {
     expect(fetchMock.mock.calls[1][0]).toBe('https://api.test/category/1/products')
     expect(products[0]).toBeInstanceOf(Product)
     expect(products[0].name).toBe('Gadget')
+  })
+
+  it('toMany() populates .total from X-Total-Count too — it hits the same generated index() action', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ id: 1, name: 'Widgets' }))
+      .mockResolvedValueOnce(jsonResponseWithTotal([{ id: 10, name: 'Gadget', category_id: 1 }], 5))
+
+    const category = await Category.find(1)
+    const products = await category.products()
+
+    expect(products.total).toBe(5)
   })
 
   it('toOne() fetches the SAME array-shaped nested route and returns the first element', async () => {

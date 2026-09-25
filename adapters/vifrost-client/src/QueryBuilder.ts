@@ -1,4 +1,6 @@
 import { buildQueryString, createQueryState } from './queryString.js'
+import { toModelCollection } from './ModelCollection.js'
+import type { ModelCollection } from './ModelCollection.js'
 import type { QueryState } from './types.js'
 
 /**
@@ -18,7 +20,7 @@ export class QueryBuilder<T> {
 
   constructor(
     private readonly path: string,
-    private readonly fetchMany: (path: string, includes: string[]) => Promise<T[]>,
+    private readonly fetchMany: (path: string, includes: string[]) => Promise<ModelCollection<T>>,
     private readonly fetchOne: (id: string | number, includes: string[]) => Promise<T>,
     private readonly maxLimit: number | null
   ) {}
@@ -115,9 +117,10 @@ export class QueryBuilder<T> {
     }
   }
 
-  async get(): Promise<T[]> {
+  async get(): Promise<ModelCollection<T>> {
     if (this.explicitId !== undefined) {
-      return [await this.fetchOne(this.explicitId, this.state.includes)]
+      const row = await this.fetchOne(this.explicitId, this.state.includes)
+      return toModelCollection([row], 1)
     }
     this.assertWithinLimit()
     return this.fetchMany(`${this.path}${this.toQueryString()}`, this.state.includes)

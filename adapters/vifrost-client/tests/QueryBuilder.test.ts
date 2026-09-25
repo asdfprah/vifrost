@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { QueryBuilder } from '../src/QueryBuilder.js'
+import { toModelCollection } from '../src/ModelCollection.js'
 import { buildQueryString, createQueryState } from '../src/queryString.js'
 
 describe('buildQueryString', () => {
@@ -48,7 +49,7 @@ describe('QueryBuilder', () => {
   function queryBuilder(calledPaths: string[], maxLimit: number | null = null) {
     const fetchMany = async (path: string) => {
       calledPaths.push(path)
-      return [{ id: 1 }]
+      return toModelCollection([{ id: 1 }], 1)
     }
     const fetchOne = async (id: string | number) => {
       calledPaths.push(`fetchOne:${id}`)
@@ -99,13 +100,18 @@ describe('QueryBuilder', () => {
   })
 
   it('first() forces limit(1) and returns the first result, or null if empty', async () => {
-    const fetchMany = async () => [{ id: 1 }, { id: 2 }]
+    const fetchMany = async () => toModelCollection([{ id: 1 }, { id: 2 }], 2)
     const fetchOne = async (id: string | number) => ({ id })
     const result = await new QueryBuilder<{ id: number }>('product', fetchMany, fetchOne, null).first()
 
     expect(result).toEqual({ id: 1 })
 
-    const empty = await new QueryBuilder<{ id: number }>('product', async () => [], fetchOne, null).first()
+    const empty = await new QueryBuilder<{ id: number }>(
+      'product',
+      async () => toModelCollection([], 0),
+      fetchOne,
+      null
+    ).first()
     expect(empty).toBeNull()
   })
 
@@ -126,6 +132,15 @@ describe('QueryBuilder', () => {
 
     const collection = await queryBuilder(calledPaths).whereId(5).get()
     expect(collection).toEqual([{ id: 5 }])
+    expect(collection.total).toBe(1)
+  })
+
+  it('get() passes .total through from fetchMany unchanged', async () => {
+    const calledPaths: string[] = []
+
+    const results = await queryBuilder(calledPaths).get()
+
+    expect(results.total).toBe(1)
   })
 
   it('whereId() bypasses where/sort/include entirely — no filter query is ever built', async () => {

@@ -1,7 +1,9 @@
 import { client, getRegistry, getUnloadedRelationAccess } from './config.js'
 import { guardUnloadedRelations } from './RelationGuard.js'
 import { QueryBuilder } from './QueryBuilder.js'
+import { toModelCollection } from './ModelCollection.js'
 import { buildQueryString, createQueryState } from './queryString.js'
+import type { ModelCollection } from './ModelCollection.js'
 import type { ModelConstructor } from './types.js'
 
 const NO_INCLUDES: string[] = []
@@ -48,6 +50,17 @@ export class Model {
   }
 
   /**
+   * Reads `X-Total-Count` off a collection response's headers — how many rows
+   * match the request in total, independent of how many this page returned.
+   * Falls back to the page size itself if the header is missing (an older
+   * backend, or a response mocked without it in a test), so `.total` is
+   * always a valid number rather than `NaN`.
+   */
+  private static readTotalCount(headers: Headers, pageSize: number): number {
+    return Number(headers.get('X-Total-Count') ?? pageSize)
+  }
+
+  /**
    * Wraps raw JSON in a Model instance and, if a {@link Registry} was passed
    * to {@link configure}, registers it so a future "this record changed"
    * event can find and refresh it. Every fetch path (find/all/query/
@@ -87,12 +100,12 @@ export class Model {
   }
 
   /** Shorthand for `query().get()` — goes through the same `maxLimit` guard as any other collection fetch. */
-  static async all<T extends Model>(this: ModelConstructor<T>): Promise<T[]> {
+  static async all<T extends Model>(this: ModelConstructor<T>): Promise<ModelCollection<T>> {
     return this.query().get()
   }
 
   static async find<T extends Model>(this: ModelConstructor<T>, id: string | number): Promise<T> {
-    const row = await client().get<Record<string, unknown>>(`${this.resource}/${id}`)
+    const { body: row } = await client().get<Record<string, unknown>>(`${this.resource}/${id}`)
     return this.instantiate(row)
   }
 
@@ -100,13 +113,18 @@ export class Model {
     return new QueryBuilder<T>(
       this.resource,
       async (path, includes) => {
-        const rows = await client().get<Record<string, unknown>[]>(path)
-        return rows.map((row) => this.instantiate(row, includes))
+        const { body: rows, headers } = await client().get<Record<string, unknown>[]>(path)
+        return toModelCollection(
+          rows.map((row) => this.instantiate(row, includes)),
+          Model.readTotalCount(headers, rows.length)
+        )
       },
       async (id, includes) => {
         const state = createQueryState()
         state.includes = includes
-        const row = await client().get<Record<string, unknown>>(`${this.resource}/${id}${buildQueryString(state)}`)
+        const { body: row } = await client().get<Record<string, unknown>>(
+          `${this.resource}/${id}${buildQueryString(state)}`
+        )
         return this.instantiate(row, includes)
       },
       this.maxLimit
@@ -127,7 +145,7 @@ export class Model {
     const primaryKeyValue = this[modelConstructor.primaryKey]
     const attributes: Record<string, unknown> = { ...this }
 
-    const updatedRow =
+    const { body: updatedRow } =
       primaryKeyValue !== undefined && primaryKeyValue !== null
         ? await client().put<Record<string, unknown>>(`${modelConstructor.resource}/${primaryKeyValue}`, attributes)
         : await client().post<Record<string, unknown>>(modelConstructor.resource, attributes)
@@ -188,13 +206,24 @@ export class Model {
     return this
   }
 
-  /** One-hop collection relation: `GET {resource}/{id}/{relationName}`. */
-  protected async toMany<R extends Model>(relationName: string, related: ModelConstructor<R>): Promise<R[]> {
+  /**
+   * One-hop collection relation: `GET {resource}/{id}/{relationName}` — the
+   * same generated `index()` action as a flat collection fetch (see
+   * `MakeAPICommand::buildNestedRoutes()` on the Laravel side), so it carries
+   * the same `X-Total-Count` header.
+   */
+  protected async toMany<R extends Model>(
+    relationName: string,
+    related: ModelConstructor<R>
+  ): Promise<ModelCollection<R>> {
     const modelConstructor = this.constructor as ModelConstructor
-    const rows = await client().get<Record<string, unknown>[]>(
+    const { body: rows, headers } = await client().get<Record<string, unknown>[]>(
       `${modelConstructor.resource}/${this.primaryKeyValue()}/${relationName}`
     )
-    return rows.map((row) => related.instantiate(row))
+    return toModelCollection(
+      rows.map((row) => related.instantiate(row)),
+      Model.readTotalCount(headers, rows.length)
+    )
   }
 
   /**
@@ -215,7 +244,7 @@ export class Model {
     childId: string | number
   ): Promise<R> {
     const modelConstructor = this.constructor as ModelConstructor
-    const row = await client().get<Record<string, unknown>>(
+    const { body: row } = await client().get<Record<string, unknown>>(
       `${modelConstructor.resource}/${this.primaryKeyValue()}/${relationName}/${childId}`
     )
     return related.instantiate(row)

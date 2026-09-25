@@ -11,6 +11,12 @@ export interface HttpClientOptions {
   fetch?: typeof fetch
 }
 
+/** What every {@link HttpClient} method resolves — the parsed body alongside the raw response headers. */
+export interface HttpResponse<ResponseBody> {
+  body: ResponseBody
+  headers: Headers
+}
+
 /**
  * What happens when code reads a property off a relation-loader method that
  * hasn't been loaded (e.g. `product.category.name` when the row wasn't
