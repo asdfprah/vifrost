@@ -14,6 +14,13 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 }
 
+function jsonResponseWithTotal(body: unknown, total: number): Response {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { 'content-type': 'application/json', 'X-Total-Count': String(total) },
+  })
+}
+
 let fetchMock: ReturnType<typeof vi.fn>
 let scope: ReturnType<typeof effectScope>
 
@@ -61,6 +68,38 @@ describe('useQuery (no registry configured)', () => {
     await vi.waitFor(() => expect(isLoading.value).toBe(false))
 
     expect(data.value[0].name).toBe('Draft gadget')
+  })
+
+  it('exposes total from the X-Total-Count response header, for building a pager', async () => {
+    fetchMock.mockResolvedValue(jsonResponseWithTotal([{ id: 1, name: 'Gadget' }], 21))
+
+    const { total, isLoading } = scope.run(() => useQuery(Product.query().limit(1)))!
+    await vi.waitFor(() => expect(isLoading.value).toBe(false))
+
+    expect(total.value).toBe(21)
+  })
+
+  it('falls back total to the page size when X-Total-Count is missing', async () => {
+    fetchMock.mockResolvedValue(jsonResponse([{ id: 1 }, { id: 2 }]))
+
+    const { total, isLoading } = scope.run(() => useQuery(Product.query()))!
+    await vi.waitFor(() => expect(isLoading.value).toBe(false))
+
+    expect(total.value).toBe(2)
+  })
+
+  it('resets total to 0 when the query fails', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponseWithTotal([{ id: 1 }], 5))
+      .mockResolvedValueOnce(new Response(null, { status: 500 }))
+
+    const { total, refetch, isLoading } = scope.run(() => useQuery(Product.query()))!
+    await vi.waitFor(() => expect(isLoading.value).toBe(false))
+    expect(total.value).toBe(5)
+
+    await refetch()
+
+    expect(total.value).toBe(0)
   })
 })
 

@@ -2,7 +2,7 @@ import { getRegistry } from '@vifrost/client'
 import type { Model, ModelConstructor, QueryBuilder } from '@vifrost/client'
 import { onScopeDispose, ref, toValue, watchEffect } from 'vue'
 import type { MaybeRefOrGetter, Ref } from 'vue'
-import type { AsyncResource } from './types.js'
+import type { QueryResource } from './types.js'
 
 /**
  * Reactive wrapper around a {@link QueryBuilder}'s `get()`.
@@ -19,10 +19,11 @@ import type { AsyncResource } from './types.js'
  * sync: an "updated" event replaces that row in place, a "deleted" event
  * removes it — no extra network calls beyond the query itself.
  */
-export function useQuery<T extends Model>(source: MaybeRefOrGetter<QueryBuilder<T>>): AsyncResource<T[]> {
+export function useQuery<T extends Model>(source: MaybeRefOrGetter<QueryBuilder<T>>): QueryResource<T> {
   const data = ref<T[]>([]) as Ref<T[]>
   const error = ref<unknown>(null)
   const isLoading = ref(false)
+  const total = ref(0)
 
   let unsubscribes: Array<() => void> = []
   let latestRequestId = 0
@@ -76,6 +77,7 @@ export function useQuery<T extends Model>(source: MaybeRefOrGetter<QueryBuilder<
         return
       }
       data.value = rows
+      total.value = rows.total
       subscribeToResults(rows)
     } catch (caught) {
       if (requestId !== latestRequestId) {
@@ -83,6 +85,7 @@ export function useQuery<T extends Model>(source: MaybeRefOrGetter<QueryBuilder<
       }
       error.value = caught
       data.value = []
+      total.value = 0
     } finally {
       if (requestId === latestRequestId) {
         isLoading.value = false
@@ -97,5 +100,5 @@ export function useQuery<T extends Model>(source: MaybeRefOrGetter<QueryBuilder<
 
   onScopeDispose(stopSubscriptions)
 
-  return { data, error, isLoading, refetch: load }
+  return { data, error, isLoading, refetch: load, total }
 }
