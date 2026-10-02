@@ -120,6 +120,17 @@ reachable in a single request via Spatie's `?include=posts.comments` on the flat
 `index`/`show` route instead, since every generated controller wires
 `Spatie\QueryBuilder\QueryBuilder` with `allowedIncludes` for the model's relations.
 
+`vifrost:api` is a one-time kickoff, not something meant to keep `routes/api.php` in
+sync forever — the expectation is that you'll hand-edit the generated routes
+afterward (adding middleware, auth, dropping a verb, ...), the same way
+`vifrost:controller`/`vifrost:request` already refuse to overwrite an existing
+Controller/FormRequest unless you pass `--force`. If `routes/api.php` already
+references a model's controller, `vifrost:api` asks before appending that model's
+route block again, so a later re-run (e.g. generating "all" models after adding one
+new one) can't silently reintroduce a route you'd since removed or duplicate ones
+you'd since customized. Pass `--force` to skip the prompt (e.g. in CI, or when you
+genuinely want a fresh block appended alongside the old one).
+
 Filtering, sorting and includes are opt-in per model, and the generated controller
 keeps the first two consolidated in one place — `allowedFilters()`/`allowedIncludes()`
 private methods shared by both `index()` and `show()` — so extending them can't
