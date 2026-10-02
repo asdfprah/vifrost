@@ -21,7 +21,7 @@ class MakeAPICommand extends Command
      *
      * @var string
      */
-    protected $signature = 'vifrost:api {model=all}';
+    protected $signature = 'vifrost:api {model=all} {--force : Append route blocks even for a model routes/api.php already references, without asking}';
 
     /**
      * The console command description.
@@ -55,6 +55,8 @@ class MakeAPICommand extends Command
         $this->ensureApiRoutesFile($path);
         $this->ensureApiRoutingRegistered(base_path('bootstrap/app.php'));
 
+        $existingRoutes = file_get_contents($path);
+
         foreach ($models as $model) {
             $exploded = explode('\\',  $model);
 
@@ -66,15 +68,64 @@ class MakeAPICommand extends Command
 
             Artisan::call("vifrost:controller {$shortName}");
 
+            if ($this->routesAlreadyExist($shortName, $existingRoutes) && !$this->shouldOverwriteRoutes($shortName, $path)) {
+                continue;
+            }
+
             $routeSubPath = strtolower($shortName);
 
             $routes = $this->buildFlatRoutes($shortName, $routeSubPath);
             $routes .= $this->buildNestedRoutes($model, $routeSubPath);
 
             file_put_contents($path, $routes,  FILE_APPEND | LOCK_EX);
+            $existingRoutes .= $routes;
         }
 
         return 0;
+    }
+
+    /**
+     * Whether routes/api.php already registers this model's flat CRUD group
+     * — the `Route::controller(...)` block {@see buildFlatRoutes} would
+     * otherwise append a second time. Detected by the controller class
+     * reference alone, not by diffing exact route lines: good enough to flag
+     * "this model was routed before" without parsing routes/api.php as PHP,
+     * and routes/api.php is meant to evolve by hand after the initial
+     * generation (auth, middleware, a removed verb, ...) — not be kept in
+     * sync on every regeneration.
+     *
+     * @param string $shortName model class basename, e.g. "Product"
+     * @param string $existingContent current routes/api.php contents
+     * @return bool
+     */
+    protected function routesAlreadyExist(string $shortName, string $existingContent): bool
+    {
+        return str_contains($existingContent, "\\App\\Http\\Controllers\\{$shortName}Controller");
+    }
+
+    /**
+     * Asks before appending a possibly-duplicate route block for a model
+     * routes/api.php already references, since blindly re-appending would
+     * silently sit alongside (and, depending on the exact patterns, shadow or
+     * be shadowed by) whatever the developer already changed by hand.
+     * `--force` skips the prompt — e.g. for CI, or a deliberate re-run.
+     *
+     * @param string $shortName model class basename, e.g. "Product"
+     * @param string $path routes/api.php absolute path, only for the message
+     * @return bool
+     */
+    protected function shouldOverwriteRoutes(string $shortName, string $path): bool
+    {
+        if ($this->option('force')) {
+            return true;
+        }
+
+        $this->components->warn("Routes for {$shortName} already appear to exist in {$path}.");
+
+        return $this->confirm(
+            "Append a new {$shortName} route block anyway? This may duplicate or conflict with routes you've since customized.",
+            false
+        );
     }
 
     /**
