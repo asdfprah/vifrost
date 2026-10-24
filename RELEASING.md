@@ -115,11 +115,20 @@ actual `cancelled` run short-circuits the rest.
   installers — it blocks `@vifrost/client`'s *own* releases, since
   `@semantic-release/npm`'s `npm version` prepare step resolves the whole npm
   workspace graph and fails outright on an unsatisfiable sibling range.
-  Locally, this is reconciled by `adapters/package.json`'s
-  `"overrides": {"@vifrost/client": "*"}`: it keeps `vifrost-vue`'s declared
-  range historically honest for real consumers while still forcing npm to
-  resolve `@vifrost/client` to the local workspace symlink for everything
-  *inside* this monorepo, version drift or not.
+  This is reconciled by `adapters/vifrost-vue/tsconfig.json`'s `paths` entry
+  and `vitest.config.ts`'s matching `resolve.alias` (see both files' own
+  comments for why, and the "node_modules/@vifrost/..." entry below) — not by
+  an `adapters/package.json` `overrides` entry, which seems like the obvious
+  fix but doesn't reliably hold across npm versions (confirmed: npm 11
+  resolves an `overrides`-forced sibling to the workspace symlink, npm 12
+  installs a real nested copy from the registry instead — exactly the
+  problem `overrides` was meant to prevent — and separately, `npm ci` under
+  npm 12 flags the override itself as "out of sync" with the lockfile
+  (`EUSAGE`, `Missing: @vifrost/client@0.1.1 from lock file`), refusing to
+  install at all). Since every `release.yml` npm job runs `npm install -g npm@latest`
+  right before installing, relying on `overrides` here would be relying on
+  behavior this pipeline has already observed breaking from one npm major to
+  the next — avoid it for this specific problem.
 
 ## Local dev setup
 
@@ -270,23 +279,27 @@ this way, both worth checking first if a run fails again:
   local nested-`node_modules` shadowing bug below by bumping the range to
   match local source, without checking `npm view @vifrost/client versions`
   first). Fix: point `vifrost-vue`'s range at whatever's really published,
-  then separately reconcile local linking via `adapters/package.json`'s
-  `overrides` (see "Publishing mechanism per target" above) instead of ever
-  bumping a declared range to chase a version that was never published.
+  then separately reconcile local linking via tsconfig/`vitest.config.ts`
+  (see "Publishing mechanism per target" above) instead of ever bumping a
+  declared range to chase a version that was never published.
 - **A workspace package's `node_modules/@vifrost/<sibling>` is a real,
   outdated copy instead of the symlink to the local workspace package** —
   the same nested-shadowing failure mode already covered for
   `node_modules/semantic-release/node_modules/@semantic-release/npm` above,
   but between this repo's own packages: npm workspaces only symlinks a
   sibling package when the dependent's declared semver range is satisfied by
-  the sibling's *local* version; if the range doesn't cover it, npm installs
-  a real copy from the registry instead (whatever version does satisfy the
-  range), silently shadowing local source changes in that one workspace
-  package's builds/tests. Check with
+  the sibling's *local* version; if the range doesn't cover it (likely
+  whenever `@vifrost/client` has unreleased local changes — see the
+  `ETARGET` entry above), npm installs a real copy from the registry instead
+  (whatever version does satisfy the range), silently shadowing local source
+  changes in that one workspace package's builds/tests. Check with
   `file adapters/<package>/node_modules/@vifrost/<sibling>` — a `directory`
   means it's shadowed, a symlink (`lrwxr-xr-x` in `ls -la`) means it's fine.
-  `adapters/package.json`'s `"overrides": {"@vifrost/client": "*"}` exists
-  specifically to prevent this for `@vifrost/client`; if a different sibling
-  package ever needs the same treatment, add it there the same way rather
-  than bumping anyone's declared range to "fix" it (see the `ETARGET` entry
-  above for why that backfires).
+  Resist the urge to "fix" this with an `adapters/package.json` `overrides`
+  entry — it looks like the right tool, but doesn't reliably hold across npm
+  versions (see above) and risks reintroducing the `ETARGET` deadlock on top.
+  `adapters/vifrost-vue/tsconfig.json`'s `paths` entry (build/type-check) and
+  `vitest.config.ts`'s `resolve.alias` (test runtime) exist specifically to
+  route around this shadowing for `@vifrost/client` without touching
+  dependency resolution at all; if a different sibling package ever needs
+  the same treatment, add the same two entries for it there.

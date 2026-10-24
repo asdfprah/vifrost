@@ -10,7 +10,31 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "lib": ["ES2022", "DOM"]
+    "lib": ["ES2022", "DOM"],
+    "baseUrl": ".",
+    // package.json's "@vifrost/client" range must stay satisfiable by what's
+    // actually published (so npm ci and `npm version` can resolve the whole
+    // workspace graph, and so the metadata stays honest for real installers)
+    // — it can't just track this monorepo's own local version, which is
+    // often ahead of the registry. That leaves node_modules/@vifrost/client
+    // a stale nested copy of an older release instead of a symlink to the
+    // workspace sibling whenever the two have drifted apart. This mapping is
+    // the type-checker-only fix: tsc always resolves "@vifrost/client" to
+    // this package's own built dist, regardless of what node_modules
+    // actually contains. It must point at the declaration file directly
+    // (not the package directory, and not its dist/ folder) — under
+    // "moduleResolution": "NodeNext", a `paths` substitution only does
+    // ESM-style folder resolution (package.json "exports"/"types"), which
+    // fails silently for a plain directory and falls back to node_modules.
+    //
+    // This only fixes `tsc`/the build — vitest resolves `@vifrost/client` at
+    // runtime through node_modules same as Node always does, so `npm test`
+    // locally can still run against a stale nested copy until the next time
+    // someone bumps the version range below to a client version that's
+    // actually been published, or manually relinks (see RELEASING.md).
+    "paths": {
+      "@vifrost/client": ["../vifrost-client/dist/index.d.ts"]
+    }
   },
   "include": ["src"]
 }
