@@ -1,3 +1,13 @@
+## [0.2.1](https://github.com/asdfprah/vifrost/compare/vifrost-vue-v0.2.0...vifrost-vue-v0.2.1) (2026-10-24)
+
+### Features
+
+* **laravel:** make api command ask for confirmation before overwrite ([e9ebfaa](https://github.com/asdfprah/vifrost/commit/e9ebfaa0a235fa49f439695facf549c86cbacca2))
+
+### Bug Fixes
+
+* **vue:** resolve @vifrost/client locally without breaking npm ci ([6dea7f7](https://github.com/asdfprah/vifrost/commit/6dea7f78185cbad5d6ee4a948efc1b1b683384b6))
+
 ## [0.2.0](https://github.com/asdfprah/vifrost/compare/vifrost-vue-v0.1.0...vifrost-vue-v0.2.0) (2026-09-25)
 
 ### Features
