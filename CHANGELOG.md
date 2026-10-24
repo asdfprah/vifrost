@@ -1,3 +1,11 @@
+## [0.5.0](https://github.com/asdfprah/vifrost/compare/v0.4.0...v0.5.0) (2026-10-24)
+
+### Features
+
+* **client:** added methods to obtain items total count ([1b1df95](https://github.com/asdfprah/vifrost/commit/1b1df95e09b2b87bb97f2896594388505b5e0382))
+* **laravel:** make api command ask for confirmation before overwrite ([e9ebfaa](https://github.com/asdfprah/vifrost/commit/e9ebfaa0a235fa49f439695facf549c86cbacca2))
+* **vue:** updated useQuery to expose total count ([7ac8c89](https://github.com/asdfprah/vifrost/commit/7ac8c8988012954dc829cce13466f6360537dd4c))
+
 ## [0.4.0](https://github.com/asdfprah/vifrost/compare/v0.3.0...v0.4.0) (2026-09-22)
 
 ### Features
