@@ -1,6 +1,6 @@
 {
   "name": "@vifrost/client",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Framework-agnostic runtime client for Laravel Vifrost APIs: a typed Model base class, a spatie/laravel-query-builder-compatible query builder, and an identity map ready for real-time sync.",
   "type": "module",
   "main": "./dist/index.js",
