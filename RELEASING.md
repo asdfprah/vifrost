@@ -104,6 +104,22 @@ actual `cancelled` run short-circuits the rest.
   `@semantic-release/git`'s `assets` includes `../package-lock.json`, so the
   regenerated lockfile is part of the same release commit instead of drifting
   out of sync for the *next* run to trip over.
+- **`@vifrost/vue` depends on `@vifrost/client` — declare that range against
+  what's actually published, never against the local workspace version.**
+  `adapters/vifrost-vue/package.json`'s `peerDependencies`/`devDependencies`
+  on `@vifrost/client` must be satisfiable by a version that's *actually on
+  the npm registry* right now, not by whatever `adapters/vifrost-client/package.json`
+  happens to say locally — those two can disagree for a while (a release can
+  fail partway, bumping the local version without ever reaching npm; see
+  "Debugging" below). Getting this backwards doesn't just mislead real
+  installers — it blocks `@vifrost/client`'s *own* releases, since
+  `@semantic-release/npm`'s `npm version` prepare step resolves the whole npm
+  workspace graph and fails outright on an unsatisfiable sibling range.
+  Locally, this is reconciled by `adapters/package.json`'s
+  `"overrides": {"@vifrost/client": "*"}`: it keeps `vifrost-vue`'s declared
+  range historically honest for real consumers while still forcing npm to
+  resolve `@vifrost/client` to the local workspace symlink for everything
+  *inside* this monorepo, version drift or not.
 
 ## Local dev setup
 
@@ -237,3 +253,40 @@ this way, both worth checking first if a run fails again:
   it stopped mattering once the actual failures were fixed, but if it's ever
   the *only* error with no other failed step above it, that's worth
   investigating properly instead of assuming it's secondary.
+- **`release-client` fails at the `npm version` step** (inside
+  `@semantic-release/npm`'s `prepare`) **with `npm error code ETARGET` /
+  `No matching version found for @vifrost/client@^X.Y.Z`** — note this is
+  `@vifrost/client` failing to version *itself*, over a complaint that names
+  `@vifrost/client`: the real cause is `adapters/vifrost-vue/package.json`
+  declaring a `peerDependencies`/`devDependencies` range on `@vifrost/client`
+  that no published version satisfies. `npm version` resolves the *whole* npm
+  workspace graph, not just the package it's bumping, so an unsatisfiable
+  sibling range blocks it outright — and since this blocks `@vifrost/client`
+  from ever completing a release, the registry stays stuck exactly on the
+  version that caused the mismatch in the first place, a standing deadlock
+  rather than a one-off failure. This happens whenever `vifrost-vue`'s
+  declared range gets bumped to match `adapters/vifrost-client/package.json`'s
+  *local* version instead of what's *actually on npm* (e.g. "fixing" the
+  local nested-`node_modules` shadowing bug below by bumping the range to
+  match local source, without checking `npm view @vifrost/client versions`
+  first). Fix: point `vifrost-vue`'s range at whatever's really published,
+  then separately reconcile local linking via `adapters/package.json`'s
+  `overrides` (see "Publishing mechanism per target" above) instead of ever
+  bumping a declared range to chase a version that was never published.
+- **A workspace package's `node_modules/@vifrost/<sibling>` is a real,
+  outdated copy instead of the symlink to the local workspace package** —
+  the same nested-shadowing failure mode already covered for
+  `node_modules/semantic-release/node_modules/@semantic-release/npm` above,
+  but between this repo's own packages: npm workspaces only symlinks a
+  sibling package when the dependent's declared semver range is satisfied by
+  the sibling's *local* version; if the range doesn't cover it, npm installs
+  a real copy from the registry instead (whatever version does satisfy the
+  range), silently shadowing local source changes in that one workspace
+  package's builds/tests. Check with
+  `file adapters/<package>/node_modules/@vifrost/<sibling>` — a `directory`
+  means it's shadowed, a symlink (`lrwxr-xr-x` in `ls -la`) means it's fine.
+  `adapters/package.json`'s `"overrides": {"@vifrost/client": "*"}` exists
+  specifically to prevent this for `@vifrost/client`; if a different sibling
+  package ever needs the same treatment, add it there the same way rather
+  than bumping anyone's declared range to "fix" it (see the `ETARGET` entry
+  above for why that backfires).
