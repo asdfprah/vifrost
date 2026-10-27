@@ -37,21 +37,29 @@ class Describer{
     }
 
     /**
-     * Search foreign keys for a given database column
+     * Search the foreign key of a given database column, preferring a single-column key over a
+     * composite one that also contains the column. The returned key's foreignColumn is the referenced
+     * column at the same position as the given local column.
+     *
      * @param string $connection database connection name
      * @param string $table database table name
      * @param string $column database table column
      *
-     * @return mixed
+     * @return stdClass|null
      */
     public static function getForeignKeysFor( string $connection, string $table , string $column){
-        $foreignKeys = self::getForeignKeys( $connection, $table );
-        foreach ($foreignKeys as $foreign) {
-            if( in_array( $column , $foreign->localColumn ) ){
-                return $foreign;
-            }
+        $candidates = array_filter(
+            self::getForeignKeys( $connection, $table ),
+            fn ($foreign) => in_array( $column , $foreign->localColumn )
+        );
+        if( empty($candidates) ){
+            return null;
         }
-        return null;
+        usort($candidates, fn ($a, $b) => count($a->localColumn) <=> count($b->localColumn));
+        $foreign = $candidates[0];
+        $position = array_search( $column, $foreign->localColumn );
+        $foreign->foreignColumn = $foreign->foreignColumnName[$position] ?? null;
+        return $foreign;
     }
 
     /**
@@ -134,7 +142,7 @@ class Describer{
      * @return int|null
      */
     private static function extractLength(string $typeName, string $type){
-        $stringTypes = ['char', 'varchar', 'binary', 'varbinary'];
+        $stringTypes = ['char', 'bpchar', 'varchar', 'binary', 'varbinary'];
         if( !in_array( strtolower($typeName) , $stringTypes ) ){
             return null;
         }

@@ -15,6 +15,7 @@ class ValidationGenerator{
 
     public function generate($description){
         $this->addRequiredRule( !$description["isNullable"] && !$description["hasDefaultValue"] && !$description["hasAutoIncrement"] );
+        $this->addNullableRule( $description["isNullable"] );
         $this->addTypeRule($description["type"], $description["rawType"] ?? $description["type"]);
         $this->addLengthRule( $description["length"] );
         if($description["isForeign"]){
@@ -25,7 +26,7 @@ class ValidationGenerator{
 
     private function addExistsRule($foreign){
         $table = $foreign->foreignTable;
-        $column = $foreign->foreignColumnName[0];
+        $column = $foreign->foreignColumn;
         $this->addRule("exists:{$table},{$column}");
     }
 
@@ -42,6 +43,18 @@ class ValidationGenerator{
             return;
         }
         $this->addRule("required");
+    }
+
+    /**
+     * Lets a nullable column be cleared by sending null, instead of validating null against its type rule
+     *
+     * @param bool $isNullable
+     */
+    private function addNullableRule( bool $isNullable ){
+        if(!$isNullable){
+            return;
+        }
+        $this->addRule("nullable");
     }
 
     /**
@@ -88,7 +101,8 @@ class ValidationGenerator{
                 break;
             case 'datetime':
             case 'timestamp':
-                $this->addRule("date_format:Y-m-d H:i:s");
+            case 'timestamptz':
+                $this->addRule("date");
                 break;
             case 'decimal':
             case 'numeric':
@@ -104,6 +118,7 @@ class ValidationGenerator{
                 $this->addRule("integer");
                 break;
             case 'char':
+            case 'bpchar':
             case 'varchar':
             case 'string':
             case 'set':
@@ -115,11 +130,12 @@ class ValidationGenerator{
                 $this->addRule("string");
                 break;
             case 'time':
-                $this->addRule("date_format:H:i");
+            case 'timetz':
+                $this->addRule("date_format:H:i,H:i:s");
                 break;
             case 'json':
             case 'jsonb':
-                $this->addRule("json");
+                $this->addRule("array");
                 break;
             case 'enum':
                 $this->addRule("string");

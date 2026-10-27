@@ -80,6 +80,13 @@ it('applies the global max_limit by default, with no ?limit= at all, and reports
     expect($total)->toBe(5);
 });
 
+it('responds 404 from show() for a missing record instead of an empty 200', function () {
+    $controllerClass = generatedProductControllerClass();
+    app()->instance('request', Request::create('/api/product/999999', 'GET'));
+
+    (new $controllerClass())->show(999999);
+})->throws(\Illuminate\Database\Eloquent\ModelNotFoundException::class);
+
 it('honors an explicit ?limit= under the cap, and still reports the real total', function () {
     [$rows, $total] = controllerIndexFor('api/product', ['limit' => 2]);
 

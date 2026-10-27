@@ -57,7 +57,7 @@ class MakeControllerCommand extends VifrostCommand
         $relationsName = array_unique( $relationsName );
         $includes = "";
         foreach ($relationsName as $relation) {
-            $includes = $includes ."'". $relation. "',\r\n                ";
+            $includes = $includes ."'". $relation. "',\n                ";
         }
         return $includes;
     }

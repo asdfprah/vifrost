@@ -44,13 +44,23 @@ return [
     // matches that column on every table; 'table.column' matches just one table.
     'ignored_columns' => ['*.created_at', '*.updated_at', '*.deleted_at'],
 
-    // Directories under app/Models excluded when generating for "all" models.
+    // URL path segments ignored when resolving a request to a model (compared
+    // case-insensitively), e.g. the "api" prefix in /api/product/1.
     'exclude' => ['api'],
 
     // Where Vifrost::models() looks for Eloquent models, relative to app_path().
     // Scanned live on every call unless `php artisan vifrost:cache` has written a
     // cache file — see "Caching discovered models" below.
     'models_path' => 'Models',
+
+    // Models left out of the schema, codegen, `vifrost:api` (all) and request
+    // routing, as FQCNs — e.g. internal models the API should not expose.
+    'exclude_models' => [
+        // \App\Models\User::class,
+    ],
+
+    // Leaves out models that extend Illuminate\Database\Eloquent\Relations\Pivot.
+    'exclude_pivots' => true,
 
     // Where `php artisan vifrost:schema` writes the models/attributes/relations JSON.
     'schema_path' => storage_path('app/vifrost-schema.json'),
@@ -90,7 +100,7 @@ Generate a FormRequest, Controller, and routes for one model:
 php artisan vifrost:api User
 ```
 
-Or for every model in `app/Models` (skipping anything under the `exclude` config):
+Or for every model in `app/Models` (skipping `exclude_models` and, by default, pivots):
 
 ```bash
 php artisan vifrost:api
