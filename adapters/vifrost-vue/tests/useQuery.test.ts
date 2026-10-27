@@ -10,6 +10,14 @@ class Product extends Model {
   declare status: string
 }
 
+class StaffMemberRole extends Model {
+  static resource = 'staffmemberrole'
+  static primaryKey = ['staff_member_id', 'role_id'] as const
+  declare staff_member_id: number
+  declare role_id: number
+  declare level: number
+}
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 }
@@ -156,5 +164,32 @@ describe('useQuery (with a configured registry)', () => {
     scope.stop()
 
     expect(() => registry.track('product', 1, { id: 1, name: 'irrelevant' }, async () => ({ id: 1 }))).not.toThrow()
+  })
+})
+
+describe('useQuery with a composite primary key', () => {
+  let registry: Registry
+
+  beforeEach(() => {
+    registry = new Registry()
+    configure({ baseUrl: 'https://api.test', fetch: fetchMock as unknown as typeof fetch, registry })
+  })
+
+  it('keeps rows in sync through the registry by their joined key', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse([
+        { staff_member_id: 5, role_id: 3, level: 1 },
+        { staff_member_id: 5, role_id: 4, level: 2 },
+      ])
+    )
+
+    const { data, isLoading } = scope.run(() => useQuery(StaffMemberRole.query()))!
+    await vi.waitFor(() => expect(isLoading.value).toBe(false))
+
+    fetchMock.mockResolvedValue(jsonResponse({ staff_member_id: 5, role_id: 4, level: 9 }))
+    await registry.resync('staffmemberrole', '5,4')
+    registry.remove('staffmemberrole', '5,3')
+
+    expect(data.value.map((row) => row.level)).toEqual([9])
   })
 })

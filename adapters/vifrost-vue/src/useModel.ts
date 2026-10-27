@@ -1,4 +1,4 @@
-import type { Model, ModelConstructor } from '@vifrost/client'
+import type { Model, ModelConstructor, ModelId } from '@vifrost/client'
 import { computed, toValue } from 'vue'
 import type { MaybeRefOrGetter } from 'vue'
 import type { AsyncResource } from './types.js'
@@ -16,7 +16,7 @@ import { useQuery } from './useQuery.js'
  */
 export function useModel<T extends Model>(
   modelClass: ModelConstructor<T>,
-  id: MaybeRefOrGetter<string | number>
+  id: MaybeRefOrGetter<ModelId>
 ): AsyncResource<T | null> {
   const { data: rows, error, isLoading, refetch } = useQuery(() => modelClass.query().whereId(toValue(id)))
 
