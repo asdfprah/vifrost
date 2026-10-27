@@ -4,7 +4,6 @@ namespace Vifrost\Laravel\Commands;
 
 use Vifrost\Laravel\Vifrost;
 use Illuminate\Console\Command;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\File;
 
 class CacheModelsCommand extends Command
@@ -30,11 +29,7 @@ class CacheModelsCommand extends Command
      */
     public function handle()
     {
-        $models = (new Vifrost)->findByClass(
-            Model::class,
-            false,
-            app_path(config('vifrost.models_path', 'Models'))
-        );
+        $models = (new Vifrost)->discoverModels();
 
         $path = app()->bootstrapPath(Vifrost::MODELS_CACHE_PATH);
 

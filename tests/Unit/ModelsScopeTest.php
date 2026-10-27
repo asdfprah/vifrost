@@ -12,6 +12,41 @@ describe('ModelsScopeTest', function () {
         expect($models->map(fn($m) => class_basename($m))->all())->toBe(['DummyScopedModel']);
     });
 
+    it('leaves out Pivot subclasses by default', function () {
+        config(['vifrost.models_path' => 'ExcludableModels']);
+
+        expect((new Vifrost)->models()->map(fn($m) => class_basename($m))->sort()->values()->all())
+            ->toBe(['Internal', 'Visible']);
+    });
+
+    it('keeps Pivot subclasses when exclude_pivots is false', function () {
+        config(['vifrost.models_path' => 'ExcludableModels', 'vifrost.exclude_pivots' => false]);
+
+        expect((new Vifrost)->models()->map(fn($m) => class_basename($m))->sort()->values()->all())
+            ->toBe(['Internal', 'Visible', 'VisibleInternal']);
+    });
+
+    it('leaves out the models listed in exclude_models, with or without a leading backslash', function (string $prefix) {
+        $excluded = $prefix . 'Vifrost\\Laravel\\Tests\\Fixtures\\ExcludableModels\\Internal';
+        config(['vifrost.models_path' => 'ExcludableModels', 'vifrost.exclude_models' => [$excluded]]);
+
+        expect((new Vifrost)->models()->map(fn($m) => class_basename($m))->all())->toBe(['Visible']);
+    })->with(['without backslash' => '', 'with backslash' => '\\']);
+
+    it('vifrost:cache leaves out excluded models too', function () {
+        config(['vifrost.models_path' => 'ExcludableModels', 'vifrost.exclude_models' => ['Vifrost\\Laravel\\Tests\\Fixtures\\ExcludableModels\\Internal']]);
+        $cachePath = app()->bootstrapPath(Vifrost::MODELS_CACHE_PATH);
+
+        try {
+            Artisan::call('vifrost:cache');
+            $cached = require $cachePath;
+        } finally {
+            @unlink($cachePath);
+        }
+
+        expect(array_map('class_basename', $cached))->toBe(['Visible']);
+    });
+
     it('returns an empty collection instead of throwing when the configured models_path does not exist', function () {
         config(['vifrost.models_path' => 'NoSuchDirectory']);
 

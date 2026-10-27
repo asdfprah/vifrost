@@ -6,6 +6,7 @@ use Exception;
 use Illuminate\Support\Facades\File;
 use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Pivot;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use ReflectionClass;
@@ -85,7 +86,30 @@ class Vifrost
             return collect(require $cachePath);
         }
 
-        return $this->findByClass(Model::class, false, app_path(config('vifrost.models_path', 'Models')));
+        return $this->discoverModels();
+    }
+
+    /**
+     * Scans config('vifrost.models_path') for models, leaving out the ones
+     * config('vifrost.exclude_models') lists and, unless
+     * config('vifrost.exclude_pivots') is false, Pivot subclasses.
+     *
+     * @return \Illuminate\Support\Collection
+     */
+    public function discoverModels(): Collection
+    {
+        $models = $this->findByClass(Model::class, false, app_path(config('vifrost.models_path', 'Models')));
+
+        $excluded = array_map(fn ($model) => ltrim($model, '\\'), config('vifrost.exclude_models', []));
+        $excludePivots = config('vifrost.exclude_pivots', true);
+
+        return $models->reject(function ($model) use ($excluded, $excludePivots) {
+            if (in_array(ltrim($model, '\\'), $excluded)) {
+                return true;
+            }
+
+            return $excludePivots && is_subclass_of($model, Pivot::class);
+        })->values();
     }
 
 
@@ -152,21 +176,20 @@ class Vifrost
     private function getRequestPath()
     {
         $sections = explode("/", request()->path());
-        array_map('strtolower', $sections);
         return array_values($this->removeExcluded($sections));
     }
 
     /**
-     * Removes the vifrost excluded path sections from a array
+     * Removes the vifrost excluded path sections from a array, ignoring case
      * 
      * @param $path array of request url sections 
      * @return array
      */
     private function removeExcluded(array $path)
     {
-        $excluded = config('vifrost.exclude');
+        $excluded = array_map('strtolower', config('vifrost.exclude'));
         return array_filter($path, function ($subSection) use ($excluded) {
-            return ! in_array($subSection, $excluded);
+            return ! in_array(strtolower($subSection), $excluded);
         });
     }
 
