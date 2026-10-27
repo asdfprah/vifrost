@@ -57,6 +57,8 @@ class MakeAPICommand extends Command
 
         $existingRoutes = file_get_contents($path);
 
+        $routedModels = array_map(fn ($model) => ltrim($model, '\\'), collect($models)->all());
+
         foreach ($models as $model) {
             $exploded = explode('\\',  $model);
 
@@ -75,7 +77,7 @@ class MakeAPICommand extends Command
             $routeSubPath = strtolower($shortName);
 
             $routes = $this->buildFlatRoutes($shortName, $routeSubPath);
-            $routes .= $this->buildNestedRoutes($model, $routeSubPath);
+            $routes .= $this->buildNestedRoutes($model, $routeSubPath, $routedModels);
 
             file_put_contents($path, $routes,  FILE_APPEND | LOCK_EX);
             $existingRoutes .= $routes;
@@ -87,12 +89,12 @@ class MakeAPICommand extends Command
     /**
      * Whether routes/api.php already registers this model's flat CRUD group
      * — the `Route::controller(...)` block {@see buildFlatRoutes} would
-     * otherwise append a second time. Detected by the controller class
-     * reference alone, not by diffing exact route lines: good enough to flag
-     * "this model was routed before" without parsing routes/api.php as PHP,
-     * and routes/api.php is meant to evolve by hand after the initial
-     * generation (auth, middleware, a removed verb, ...) — not be kept in
-     * sync on every regeneration.
+     * otherwise append a second time. Detected by that block's opening line
+     * alone, not by diffing exact route lines: good enough to flag "this
+     * model was routed before" without parsing routes/api.php as PHP, and
+     * routes/api.php is meant to evolve by hand after the initial generation
+     * (auth, middleware, a removed verb, ...) — not be kept in sync on every
+     * regeneration.
      *
      * @param string $shortName model class basename, e.g. "Product"
      * @param string $existingContent current routes/api.php contents
@@ -100,7 +102,7 @@ class MakeAPICommand extends Command
      */
     protected function routesAlreadyExist(string $shortName, string $existingContent): bool
     {
-        return str_contains($existingContent, "\\App\\Http\\Controllers\\{$shortName}Controller");
+        return str_contains($existingContent, "Route::controller( '\\App\\Http\\Controllers\\{$shortName}Controller' )");
     }
 
     /**
@@ -142,7 +144,7 @@ class MakeAPICommand extends Command
 
         file_put_contents(
             $path,
-            "<?php\r\n\r\nuse Illuminate\\Support\\Facades\\Route;\r\n",
+            "<?php\n\nuse Illuminate\\Support\\Facades\\Route;\n",
             LOCK_EX
         );
     }
@@ -193,12 +195,12 @@ class MakeAPICommand extends Command
      */
     protected function buildFlatRoutes(string $shortName, string $routeSubPath): string
     {
-        return "\r\n\r\nRoute::controller( '\\App\\Http\\Controllers\\{$shortName}Controller' )->group( function(){\r\n"
-            . "    Route::get('{$routeSubPath}' , 'index' );\r\n"
-            . "    Route::get('{$routeSubPath}/{id}' , 'show');\r\n"
-            . "    Route::post('{$routeSubPath}', 'store');\r\n"
-            . "    Route::put('{$routeSubPath}/{id}', 'update');\r\n"
-            . "    Route::delete('{$routeSubPath}/{id}', 'destroy');\r\n"
+        return "\n\nRoute::controller( '\\App\\Http\\Controllers\\{$shortName}Controller' )->group( function(){\n"
+            . "    Route::get('{$routeSubPath}' , 'index' );\n"
+            . "    Route::get('{$routeSubPath}/{id}' , 'show');\n"
+            . "    Route::post('{$routeSubPath}', 'store');\n"
+            . "    Route::put('{$routeSubPath}/{id}', 'update');\n"
+            . "    Route::delete('{$routeSubPath}/{id}', 'destroy');\n"
             . "});";
     }
 
@@ -208,13 +210,16 @@ class MakeAPICommand extends Command
      * Vifrost::getQuery()). A relation of a relation isn't routed here at all —
      * that data is reachable in a single request via Spatie's dotted "include" query
      * param instead. MorphTo relations are skipped: they have no single fixed related
-     * model to route to.
+     * model to route to. So are relations to a model that will not have a controller:
+     * one Vifrost does not expose (see the exclude_models config), or one whose
+     * controller neither exists yet nor is generated in this same run.
      *
      * @param string $model model full classname
      * @param string $routeSubPath lowercased model name used as the URL segment
+     * @param array $routedModels full classnames, without leading backslash, of the models generated in this run
      * @return string
      */
-    protected function buildNestedRoutes(string $model, string $routeSubPath): string
+    protected function buildNestedRoutes(string $model, string $routeSubPath, array $routedModels = []): string
     {
         $relations = (new Mapper([$model]))->getRelationshipMap()[$model] ?? [];
         $routes = '';
@@ -229,11 +234,36 @@ class MakeAPICommand extends Command
             $relatedShortName = end($relatedExploded);
             $relationName = $relation->getRelationName();
 
-            $routes .= "\r\nRoute::get('{$routeSubPath}/{id}/{$relationName}', [\\App\\Http\\Controllers\\{$relatedShortName}Controller::class, 'index']);";
-            $routes .= "\r\nRoute::get('{$routeSubPath}/{id}/{$relationName}/{childId}', [\\App\\Http\\Controllers\\{$relatedShortName}Controller::class, 'show']);";
+            if (! $this->willHaveController($related, $relatedShortName, $routedModels)) {
+                continue;
+            }
+
+            $routes .= "\nRoute::get('{$routeSubPath}/{id}/{$relationName}', [\\App\\Http\\Controllers\\{$relatedShortName}Controller::class, 'index']);";
+            $routes .= "\nRoute::get('{$routeSubPath}/{id}/{$relationName}/{childId}', [\\App\\Http\\Controllers\\{$relatedShortName}Controller::class, 'show']);";
         }
 
         return $routes;
+    }
+
+    /**
+     * Whether a related model is exposed by Vifrost and its controller exists or is generated in this run
+     *
+     * @param string $related related model full classname
+     * @param string $relatedShortName related model class basename
+     * @param array $routedModels full classnames, without leading backslash, of the models generated in this run
+     * @return bool
+     */
+    protected function willHaveController(string $related, string $relatedShortName, array $routedModels): bool
+    {
+        $related = ltrim($related, '\\');
+        $exposed = collect($this->models)->contains(fn ($model) => ltrim($model, '\\') === $related);
+
+        if (! $exposed) {
+            return false;
+        }
+
+        return in_array($related, $routedModels)
+            || file_exists(app_path("Http/Controllers/{$relatedShortName}Controller.php"));
     }
 
     public function getModels()

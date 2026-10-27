@@ -57,7 +57,7 @@ class MakeRequestCommand extends VifrostCommand
             if( $this->shouldBeIgnored($modelInstance->getTable(), $column) ){ continue; }
             if( $columnDescription["isPrimaryKey"] ){ continue; }
 
-            $lineBreak="\r\n            "; 
+            $lineBreak="\n            "; 
 
             if( $count == 0){ $lineBreak = ""; }
 

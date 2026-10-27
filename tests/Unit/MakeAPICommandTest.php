@@ -1,6 +1,7 @@
 <?php
 
 use Vifrost\Laravel\Commands\MakeAPICommand;
+use Vifrost\Laravel\Tests\Fixtures\Category;
 use Vifrost\Laravel\Tests\Fixtures\Product;
 use Illuminate\Support\Facades\File;
 
@@ -29,7 +30,37 @@ it('creates routes/api.php with a PHP opening tag when the file does not exist y
     callProtected($this->command, 'ensureApiRoutesFile', [$path]);
 
     expect(file_exists($path))->toBeTrue();
-    expect(file_get_contents($path))->toStartWith('<?php');
+    expect(file_get_contents($path))->toStartWith('<?php')->not->toContain("\r");
+});
+
+it('builds route blocks with LF line endings', function () {
+    $routes = callProtected($this->command, 'buildFlatRoutes', ['Product', 'product'])
+        . callProtected($this->command, 'buildNestedRoutes', ['\\' . Product::class, 'product', [Category::class]]);
+
+    expect($routes)->toContain("\n")->not->toContain("\r");
+});
+
+describe('buildNestedRoutes()', function () {
+    it('routes a relation whose model is generated in the same run', function () {
+        $routes = callProtected($this->command, 'buildNestedRoutes', ['\\' . Product::class, 'product', [Category::class]]);
+
+        expect($routes)->toContain("Route::get('product/{id}/category', [\\App\\Http\\Controllers\\CategoryController::class, 'index']);");
+    });
+
+    it('skips a relation whose model has no controller and is not generated in this run', function () {
+        $routes = callProtected($this->command, 'buildNestedRoutes', ['\\' . Product::class, 'product', []]);
+
+        expect($routes)->toBe('');
+    });
+
+    it('skips a relation to an excluded model', function () {
+        config(['vifrost.exclude_models' => [Category::class]]);
+        $command = app(MakeAPICommand::class);
+
+        $routes = callProtected($command, 'buildNestedRoutes', ['\\' . Product::class, 'product', [Category::class]]);
+
+        expect($routes)->toBe('');
+    });
 });
 
 it('leaves an existing routes/api.php untouched', function () {
@@ -87,6 +118,12 @@ describe('routesAlreadyExist()', function () {
 
         expect(callProtected($this->command, 'routesAlreadyExist', ['Product', $existing]))->toBeTrue();
         expect(callProtected($this->command, 'routesAlreadyExist', ['Category', $existing]))->toBeFalse();
+    });
+
+    it('ignores nested routes of another model that point at this controller', function () {
+        $existing = "Route::get('clinic/{id}/products', [\\App\\Http\\Controllers\\ProductController::class, 'index']);";
+
+        expect(callProtected($this->command, 'routesAlreadyExist', ['Product', $existing]))->toBeFalse();
     });
 
     it('reports no collision for a brand-new routes/api.php', function () {
