@@ -1,6 +1,6 @@
 {
   "name": "@vifrost/codegen",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Generates typed @vifrost/client Model subclasses from a Laravel Vifrost schema JSON export.",
   "type": "module",
   "bin": {

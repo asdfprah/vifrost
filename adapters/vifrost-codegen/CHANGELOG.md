@@ -1,3 +1,9 @@
+## [0.3.0](https://github.com/asdfprah/vifrost/compare/vifrost-codegen-v0.2.2...vifrost-codegen-v0.3.0) (2026-10-27)
+
+### Features
+
+* **codegen:** generate composite primary keys ([26e7896](https://github.com/asdfprah/vifrost/commit/26e789687d9fa3f4e310b075425648e6aaf0cc69)), closes [#26](https://github.com/asdfprah/vifrost/issues/26)
+
 ## [0.2.2](https://github.com/asdfprah/vifrost/compare/vifrost-codegen-v0.2.1...vifrost-codegen-v0.2.2) (2026-10-27)
 
 ### Features
