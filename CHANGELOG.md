@@ -1,3 +1,9 @@
+## [0.7.0](https://github.com/asdfprah/vifrost/compare/v0.6.0...v0.7.0) (2026-10-27)
+
+### Features
+
+* **laravel:** support composite primary keys ([4c46b0a](https://github.com/asdfprah/vifrost/commit/4c46b0ac9b5d4c5d13b29e13218708f91cecc848)), closes [#26](https://github.com/asdfprah/vifrost/issues/26)
+
 ## [0.6.0](https://github.com/asdfprah/vifrost/compare/v0.5.0...v0.6.0) (2026-10-27)
 
 ### Features
