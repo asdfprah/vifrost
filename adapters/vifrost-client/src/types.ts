@@ -56,6 +56,12 @@ export interface QueryState {
   extraParams: Record<string, string>
 }
 
+/** A primary key column name, or the column names of a composite key in URL order. */
+export type PrimaryKey = string | readonly string[]
+
+/** A record id: a single key value, or the values of a composite key in the order of its columns. */
+export type ModelId = string | number | ReadonlyArray<string | number>
+
 /**
  * The static side of a {@link Model} subclass, as emitted by
  * `@vifrost/codegen`.
@@ -63,7 +69,8 @@ export interface QueryState {
 export interface ModelConstructor<T extends Model = Model> {
   new (attributes?: Record<string, unknown>): T
   resource: string
-  primaryKey: string
+  primaryKey: PrimaryKey
+  keySeparator: string
   /**
    * Max rows a collection query for this model may request — mirrors
    * `Vifrost\Laravel\Pagination::maxLimitFor()` on the Laravel side. `null`
@@ -81,7 +88,9 @@ export interface ModelConstructor<T extends Model = Model> {
    */
   relations: string[]
   instantiate<R extends Model>(this: ModelConstructor<R>, data: Record<string, unknown>, includes?: string[]): R
-  find<R extends Model>(this: ModelConstructor<R>, id: string | number): Promise<R>
+  keyOf(attributes: Record<string, unknown>): string | number | null
+  encodeId(id: ModelId): string | number
+  find<R extends Model>(this: ModelConstructor<R>, id: ModelId): Promise<R>
   query<R extends Model>(this: ModelConstructor<R>): QueryBuilder<R>
 }
 

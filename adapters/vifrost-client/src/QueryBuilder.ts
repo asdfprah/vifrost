@@ -1,7 +1,7 @@
 import { buildQueryString, createQueryState } from './queryString.js'
 import { toModelCollection } from './ModelCollection.js'
 import type { ModelCollection } from './ModelCollection.js'
-import type { QueryState } from './types.js'
+import type { ModelId, QueryState } from './types.js'
 
 /**
  * Fluent query builder returned by {@link Model.query}.
@@ -16,12 +16,12 @@ import type { QueryState } from './types.js'
  */
 export class QueryBuilder<T> {
   private state: QueryState = createQueryState()
-  private explicitId?: string | number
+  private explicitId?: ModelId
 
   constructor(
     private readonly path: string,
     private readonly fetchMany: (path: string, includes: string[]) => Promise<ModelCollection<T>>,
-    private readonly fetchOne: (id: string | number, includes: string[]) => Promise<T>,
+    private readonly fetchOne: (id: ModelId, includes: string[]) => Promise<T>,
     private readonly maxLimit: number | null
   ) {}
 
@@ -41,7 +41,7 @@ export class QueryBuilder<T> {
    * controller having `allowedFilters` configured (Vifrost's generated
    * controller stub ships that commented out).
    */
-  whereId(id: string | number): this {
+  whereId(id: ModelId): this {
     this.explicitId = id
     return this
   }
