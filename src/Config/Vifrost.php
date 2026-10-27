@@ -15,6 +15,9 @@ return [
     // Leaves out models that extend Illuminate\Database\Eloquent\Relations\Pivot.
     'exclude_pivots' => true,
 
+    // Joins the values of a composite primary key in URLs, e.g. /api/staffmemberrole/5,3.
+    'composite_key_separator' => ',',
+
     'schema_path' => storage_path('app/vifrost-schema.json'),
     'expose_schema_route' => false,
     'schema_route_path'   => 'api/_schema',

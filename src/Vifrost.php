@@ -148,7 +148,7 @@ class Vifrost
             return $query;
         }
 
-        $query = $query->where('id', $path[1]);
+        $query = $this->whereKey($query, $query->getModel(), $path[1]);
 
         if (count($path) === 2) {
             return $query;
@@ -165,7 +165,38 @@ class Vifrost
             return $relation;
         }
 
-        return $relation->where('id', $path[3]);
+        return $this->whereKey($relation, $relation->getRelated(), $path[3]);
+    }
+
+    /**
+     * Scopes a query to one record by the primary key of a given model. A composite key is
+     * given as its values joined by config('vifrost.composite_key_separator'), in the order of
+     * the key columns; a value count that does not match the key aborts with 404.
+     *
+     * @param \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Eloquent\Relations\Relation $query
+     * @param \Illuminate\Database\Eloquent\Model $model model whose primary key scopes the query
+     * @param string $key URL segment holding the key value(s)
+     * @return \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Eloquent\Relations\Relation
+     */
+    private function whereKey($query, Model $model, string $key)
+    {
+        $columns = Describer::primaryKeyColumns($model);
+
+        if (count($columns) === 1) {
+            return $query->where($model->qualifyColumn($columns[0]), $key);
+        }
+
+        $values = explode(config('vifrost.composite_key_separator', ','), $key);
+
+        if (count($columns) === 0 || count($values) !== count($columns)) {
+            abort(404);
+        }
+
+        foreach (array_combine($columns, $values) as $column => $value) {
+            $query->where($model->qualifyColumn($column), $value);
+        }
+
+        return $query;
     }
 
     /**

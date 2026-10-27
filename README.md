@@ -62,6 +62,9 @@ return [
     // Leaves out models that extend Illuminate\Database\Eloquent\Relations\Pivot.
     'exclude_pivots' => true,
 
+    // Joins the values of a composite primary key in URLs — see "Composite primary keys".
+    'composite_key_separator' => ',',
+
     // Where `php artisan vifrost:schema` writes the models/attributes/relations JSON.
     'schema_path' => storage_path('app/vifrost-schema.json'),
 
@@ -169,6 +172,24 @@ You can also generate just one piece:
 php artisan vifrost:request StoreUserRequest User   # FormRequest only
 php artisan vifrost:controller User                # Controller only (hidden command, used internally)
 ```
+
+### Composite primary keys
+
+A model whose table has a composite primary key sets `$primaryKey = null` and
+`$incrementing = false`. Vifrost reads the key columns from the table's primary
+index and identifies a record by its key values joined with
+`composite_key_separator` (`,` by default), in the order of the key columns:
+
+```
+GET    /api/staffmemberrole/5,3
+PUT    /api/staffmemberrole/5,3
+DELETE /api/staffmemberrole/5,3
+GET    /api/staffmember/5/roles/5,3
+```
+
+`vifrost:api` generates a controller that updates and deletes through a query
+scoped by the key, since Eloquent cannot save a model without a single primary
+key. Key values must not contain the separator.
 
 ### Exporting the schema for the JS/TS tooling
 
