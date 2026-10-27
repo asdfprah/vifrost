@@ -32,7 +32,8 @@ export interface VifrostRelation {
 
 export interface VifrostModelSchema {
   table: string
-  primaryKey: string
+  /** The key column, the columns of a composite key in URL order, or `null` for a table without a primary key. */
+  primaryKey: string | string[] | null
   resource: string
   /**
    * The effective max row count a collection query for this model is allowed to
@@ -47,6 +48,8 @@ export interface VifrostModelSchema {
 
 export interface VifrostSchema {
   schemaVersion: number
+  /** Joins the values of a composite key in URLs — `config('vifrost.composite_key_separator')`. Defaults to `","`. */
+  compositeKeySeparator?: string
   models: Record<string, VifrostModelSchema>
 }
 
@@ -61,6 +64,10 @@ export interface TypeMapOptions {
 export interface GenerateOptions extends TypeMapOptions {
   /** Import specifier used for the runtime client. Defaults to `"@vifrost/client"`. */
   clientImport?: string
+  /** Separator of composite key values, emitted as `static keySeparator` when it is not `","`. */
+  keySeparator?: string
+  /** Receives a message for each model left out of the generated files. */
+  onWarning?: (message: string) => void
 }
 
 export interface GeneratedFile {

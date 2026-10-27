@@ -28,7 +28,11 @@ const schema = await loadSchema(options.input)
 
 const overrides = options.typeMap ? (JSON.parse(await readFile(options.typeMap, 'utf-8')) as Record<string, string>) : undefined
 
-const files = generateSchema(schema, { overrides, clientImport: options.clientImport })
+const files = generateSchema(schema, {
+  overrides,
+  clientImport: options.clientImport,
+  onWarning: (message) => console.warn(message),
+})
 
 await mkdir(options.output, { recursive: true })
 
