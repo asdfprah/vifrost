@@ -45,6 +45,7 @@ export const DEFAULT_TYPE_MAP: Record<string, TsTypeName> = {
   float8: 'number',
 
   char: 'string',
+  bpchar: 'string',
   varchar: 'string',
   string: 'string',
   text: 'string',
@@ -57,7 +58,12 @@ export const DEFAULT_TYPE_MAP: Record<string, TsTypeName> = {
   date: 'string',
   datetime: 'string',
   timestamp: 'string',
+  timestamptz: 'string',
   time: 'string',
+  timetz: 'string',
+
+  inet: 'string',
+  macaddr: 'string',
 
   json: 'unknown',
   jsonb: 'unknown',
