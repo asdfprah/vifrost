@@ -38,5 +38,5 @@ it('reports a MariaDB json() column as longtext, not json', function () {
 it('falls back to a string rule for a MariaDB json column, since it cannot be told apart from free text', function () {
     $description = Describer::describe(new MariaDbProduct);
 
-    expect((new ValidationGenerator)->generate($description['meta']))->toBe('string');
+    expect((new ValidationGenerator)->generate($description['meta']))->toBe('nullable|string');
 });
