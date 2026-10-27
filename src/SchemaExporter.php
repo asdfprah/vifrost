@@ -96,7 +96,7 @@ class SchemaExporter{
         }
         return [
             'table' => $foreign->foreignTable,
-            'column' => $foreign->foreignColumnName[0] ?? null,
+            'column' => $foreign->foreignColumn,
         ];
     }
 
