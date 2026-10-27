@@ -25,6 +25,12 @@ describe('resolveTsType', () => {
     }
   })
 
+  it('maps the Postgres names for char, timezone-aware dates and network types to string', () => {
+    for (const type of ['bpchar', 'timestamptz', 'timetz', 'inet', 'macaddr']) {
+      expect(resolveTsType({ type, rawType: type })).toBe('string')
+    }
+  })
+
   it('maps json/jsonb to unknown, since the shape cannot be known from the schema alone', () => {
     expect(resolveTsType({ type: 'json', rawType: 'json' })).toBe('unknown')
     expect(resolveTsType({ type: 'jsonb', rawType: 'jsonb' })).toBe('unknown')
