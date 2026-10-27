@@ -1,3 +1,19 @@
+## [0.3.0](https://github.com/asdfprah/vifrost/compare/vifrost-vue-v0.2.2...vifrost-vue-v0.3.0) (2026-10-27)
+
+### Features
+
+* **client:** support composite primary keys ([5eb6083](https://github.com/asdfprah/vifrost/commit/5eb60838e12d3ba0b661ae7c4dc2c8c467eb3661)), closes [#26](https://github.com/asdfprah/vifrost/issues/26)
+* **laravel:** exclude models and pivots from discovery ([987f959](https://github.com/asdfprah/vifrost/commit/987f9597877b8c68926476dc627aa531153fa1b4)), closes [#24](https://github.com/asdfprah/vifrost/issues/24) [#27](https://github.com/asdfprah/vifrost/issues/27)
+* **laravel:** support composite primary keys ([4c46b0a](https://github.com/asdfprah/vifrost/commit/4c46b0ac9b5d4c5d13b29e13218708f91cecc848)), closes [#26](https://github.com/asdfprah/vifrost/issues/26)
+* **vue:** support composite primary keys in useQuery and useModel ([98778fe](https://github.com/asdfprah/vifrost/commit/98778fedd83386e4aafc200239fdf9dd758d4f83)), closes [#26](https://github.com/asdfprah/vifrost/issues/26)
+
+### Bug Fixes
+
+* **laravel:** generate nullable, ISO date, array and bpchar rules ([52d2813](https://github.com/asdfprah/vifrost/commit/52d2813faa8824d19dae915a09b773fc974db8b7)), closes [#15](https://github.com/asdfprah/vifrost/issues/15) [#16](https://github.com/asdfprah/vifrost/issues/16) [#19](https://github.com/asdfprah/vifrost/issues/19) [#20](https://github.com/asdfprah/vifrost/issues/20)
+* **laravel:** generate routes with LF and only for routable relations ([9609c65](https://github.com/asdfprah/vifrost/commit/9609c65f8c16577ddec4b49e4741e3b21c432c81)), closes [#18](https://github.com/asdfprah/vifrost/issues/18) [#21](https://github.com/asdfprah/vifrost/issues/21) [#22](https://github.com/asdfprah/vifrost/issues/22)
+* **laravel:** resolve composite foreign keys to the right column ([5451fbc](https://github.com/asdfprah/vifrost/commit/5451fbce33bf939dcc2e33efea9c9cd1866d5c91)), closes [#17](https://github.com/asdfprah/vifrost/issues/17)
+* **laravel:** respond 404 from show() for missing records ([cf8b1eb](https://github.com/asdfprah/vifrost/commit/cf8b1eb5014763fdf1c6a4a1f85dc57ad6f5cc25)), closes [#23](https://github.com/asdfprah/vifrost/issues/23)
+
 ## [0.2.2](https://github.com/asdfprah/vifrost/compare/vifrost-vue-v0.2.1...vifrost-vue-v0.2.2) (2026-10-27)
 
 ### Bug Fixes
