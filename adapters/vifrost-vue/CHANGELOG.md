@@ -1,3 +1,9 @@
+## [0.2.2](https://github.com/asdfprah/vifrost/compare/vifrost-vue-v0.2.1...vifrost-vue-v0.2.2) (2026-10-27)
+
+### Bug Fixes
+
+* **vue:** accept any published 0.x @vifrost/client ([9f28dee](https://github.com/asdfprah/vifrost/commit/9f28deef818d51889065f560170c5befca293707)), closes [#14](https://github.com/asdfprah/vifrost/issues/14)
+
 ## [0.2.1](https://github.com/asdfprah/vifrost/compare/vifrost-vue-v0.2.0...vifrost-vue-v0.2.1) (2026-10-24)
 
 ### Features
