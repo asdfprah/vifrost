@@ -129,6 +129,15 @@ actual `cancelled` run short-circuits the rest.
   right before installing, relying on `overrides` here would be relying on
   behavior this pipeline has already observed breaking from one npm major to
   the next — avoid it for this specific problem.
+- **Keep that range open-ended within `0.x` (`>=0.3.0 <1`), not a caret.**
+  On `0.x` a caret only accepts the same minor (`^0.1.1` means
+  `>=0.1.1 <0.2.0`), so every `feat(client)` release would leave the
+  published `@vifrost/vue` uninstallable next to the new client. Raise the
+  lower bound only when `@vifrost/vue` starts using a client API that older
+  versions lack, and only in a push *after* that client version has reached
+  npm.
+- **`release-vue` only runs when `release-client` succeeded**, so a failed
+  client release can never publish a `@vifrost/vue` that needs it.
 
 ## Local dev setup
 

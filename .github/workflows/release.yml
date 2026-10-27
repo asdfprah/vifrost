@@ -94,8 +94,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   release-vue:
-    needs: release-codegen
-    if: always() && needs.release-codegen.result != 'cancelled'
+    needs: [release-client, release-codegen]
+    if: always() && needs.release-codegen.result != 'cancelled' && needs.release-client.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
