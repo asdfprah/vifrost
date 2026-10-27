@@ -92,16 +92,16 @@ class DummyCode:modelController extends Controller
      * Display the specified resource.
      *
      * @param  int  $id
-     * @return DummyCode:model|null
+     * @return DummyCode:model
      */
-    public function show($id): ?DummyCode:model
+    public function show($id): DummyCode:model
     {
         $query = (new Vifrost)->getQuery();
 
         return QueryBuilder::for( $query )
             ->allowedFilters($this->allowedFilters())
             ->allowedIncludes($this->allowedIncludes())
-            ->first();
+            ->firstOrFail();
     }
 
     /**

@@ -7,6 +7,17 @@ return [
     // Relative to app_path() — where Vifrost::models() looks for Eloquent models.
     'models_path' => 'Models',
 
+    // Models left out of the schema, codegen, vifrost:api all and routing, as full class names.
+    'exclude_models' => [
+        // \App\Models\User::class,
+    ],
+
+    // Leaves out models that extend Illuminate\Database\Eloquent\Relations\Pivot.
+    'exclude_pivots' => true,
+
+    // Joins the values of a composite primary key in URLs, e.g. /api/staffmemberrole/5,3.
+    'composite_key_separator' => ',',
+
     'schema_path' => storage_path('app/vifrost-schema.json'),
     'expose_schema_route' => false,
     'schema_route_path'   => 'api/_schema',

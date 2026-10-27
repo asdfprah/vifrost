@@ -33,6 +33,10 @@ it('resolves a nested relation off an existing parent id', function () {
     expect($query)->toBeInstanceOf(Relation::class);
 });
 
+it('strips excluded path prefixes regardless of case', function () {
+    expect(vifrostQueryFor('API/product')->getModel())->toBeInstanceOf(Product::class);
+});
+
 it('aborts with 404 when the parent id does not exist', function () {
     vifrostQueryFor('api/category/999999/products');
 })->throws(NotFoundHttpException::class);

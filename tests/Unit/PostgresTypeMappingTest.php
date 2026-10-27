@@ -27,6 +27,10 @@ beforeEach(function () {
         $table->json('meta')->nullable();
         $table->uuid('external_id')->nullable();
         $table->smallInteger('rank')->nullable();
+        $table->char('country', 2);
+        $table->timestampTz('published_at');
+        $table->timeTz('opens_at');
+        $table->jsonb('surfaces');
     });
 });
 
@@ -41,10 +45,26 @@ it('maps Postgres native type aliases to the same rules as their MySQL/SQLite eq
     $generate = fn ($column) => (new ValidationGenerator)->generate($description[$column]);
 
     expect($generate('id'))->toBe('integer')
-        ->and($generate('rating'))->toBe('numeric')
+        ->and($generate('rating'))->toBe('nullable|numeric')
         ->and($generate('active'))->toBe('boolean')
-        ->and($generate('external_id'))->toBe('uuid')
-        ->and($generate('rank'))->toBe('integer');
+        ->and($generate('external_id'))->toBe('nullable|uuid')
+        ->and($generate('rank'))->toBe('nullable|integer');
+});
+
+it('maps Postgres bpchar, timestamptz, timetz and jsonb columns', function () {
+    $description = Describer::describe(new PgProduct);
+
+    expect($description['country']['type'])->toBe('bpchar')
+        ->and($description['published_at']['type'])->toBe('timestamptz')
+        ->and($description['opens_at']['type'])->toBe('timetz')
+        ->and($description['surfaces']['type'])->toBe('jsonb');
+
+    $generate = fn ($column) => (new ValidationGenerator)->generate($description[$column]);
+
+    expect($generate('country'))->toBe('required|string|max:2')
+        ->and($generate('published_at'))->toBe('required|date')
+        ->and($generate('opens_at'))->toBe('required|date_format:H:i,H:i:s')
+        ->and($generate('surfaces'))->toBe('required|array');
 });
 
 it('does not report the auto-increment sequence expression as a real default value', function () {
