@@ -320,6 +320,25 @@ await created.save()          // PUT, since the primary key is now set
 await created.delete()
 ```
 
+A model with a composite primary key (see "Composite primary keys" above) declares
+its key columns as a list, and takes the key values in that order:
+
+```typescript
+class StaffMemberRole extends Model {
+  static resource = 'staffmemberrole'
+  static primaryKey = ['staff_member_id', 'role_id'] as const
+  // static keySeparator = ','  — must match the backend's composite_key_separator
+}
+
+const role = await StaffMemberRole.find([5, 3])                // GET /staffmemberrole/5,3
+await new StaffMemberRole({ staff_member_id: 5, role_id: 4, level: 1 }).save()  // POST
+role.level = 2
+await role.save()                                               // PUT /staffmemberrole/5,3
+```
+
+Since the key columns are set before a record is created, `save()` sends a PUT
+only for records fetched from or already saved to the server.
+
 If a model declares a non-null `static maxLimit` (i.e. the backend requires
 pagination for it), `QueryBuilder` fails fast **client-side**, before any network
 request:

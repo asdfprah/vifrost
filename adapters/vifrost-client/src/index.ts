@@ -11,6 +11,8 @@ export type {
   ConfigureOptions,
   HttpClientOptions,
   ModelConstructor,
+  ModelId,
+  PrimaryKey,
   QueryState,
   RegistryDeletedEvent,
   RegistryEntry,
