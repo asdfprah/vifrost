@@ -43,13 +43,13 @@ export function useQuery<T extends Model>(source: MaybeRefOrGetter<QueryBuilder<
 
     unsubscribes = rows.flatMap((row) => {
       const rowConstructor = row.constructor as ModelConstructor<T>
-      const rowId = row[rowConstructor.primaryKey] as string | number | undefined
-      if (rowId === undefined || rowId === null) {
+      const rowId = rowConstructor.keyOf(row)
+      if (rowId === null) {
         return []
       }
 
       const unsubscribe = registry.subscribe<T>(rowConstructor.resource, rowId, (event) => {
-        const index = data.value.findIndex((item) => item[rowConstructor.primaryKey] === rowId)
+        const index = data.value.findIndex((item) => rowConstructor.keyOf(item) === rowId)
         if (index === -1) {
           return
         }
