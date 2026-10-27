@@ -240,3 +240,54 @@ describe('generateSchema', () => {
     expect(index.content).toContain("export * from './Category.js';")
   })
 })
+
+describe('composite and missing primary keys', () => {
+  const roleModel: VifrostModelSchema = {
+    table: 'staff_member_roles',
+    primaryKey: ['staff_member_id', 'role_id'],
+    resource: 'staffmemberrole',
+    maxLimit: 100,
+    attributes: {},
+    relations: {},
+  }
+
+  it('emits a composite primary key as a readonly tuple, without a separator line for the default one', () => {
+    const { content } = generateModelFile('App\\Models\\StaffMemberRole', roleModel)
+
+    expect(content).toContain('static primaryKey = ["staff_member_id","role_id"] as const;')
+    expect(content).not.toContain('keySeparator')
+  })
+
+  it('emits the schema separator when it is not the default', () => {
+    const files = generateSchema({
+      schemaVersion: 1,
+      compositeKeySeparator: '|',
+      models: { 'App\\Models\\StaffMemberRole': roleModel },
+    })
+
+    expect(files[0].content).toContain('static keySeparator = "|";')
+  })
+
+  it('skips a model without a primary key, warns, and leaves relations to it ungenerated', () => {
+    const warnings: string[] = []
+    const files = generateSchema(
+      {
+        schemaVersion: 1,
+        models: {
+          'App\\Models\\StaffMember': {
+            ...roleModel,
+            primaryKey: 'id',
+            resource: 'staffmember',
+            relations: { logs: { type: 'HasMany', related: 'App\\Models\\AuditLog', polymorphic: false } },
+          },
+          'App\\Models\\AuditLog': { ...roleModel, primaryKey: null, resource: 'auditlog' },
+        },
+      },
+      { onWarning: (message) => warnings.push(message) }
+    )
+
+    expect(files.map((file) => file.fileName)).toEqual(['StaffMember.ts', 'index.ts'])
+    expect(files[0].content).not.toContain("import { AuditLog }")
+    expect(warnings).toEqual(['Skipped App\\Models\\AuditLog: its table has no primary key.'])
+  })
+})

@@ -109,6 +109,21 @@ function generateRelationMethod(
   }
 }
 
+/**
+ * Emits the `static primaryKey` line, plus `static keySeparator` for a composite key with a custom separator.
+ *
+ * @param {string | string[]} primaryKey the key column, or the columns of a composite key
+ * @param {string} keySeparator separator of composite key values
+ * @returns {string}
+ */
+function generatePrimaryKeyLines(primaryKey: string | string[], keySeparator: string): string {
+  if (typeof primaryKey === 'string') {
+    return `  static primaryKey = ${JSON.stringify(primaryKey)};\n`
+  }
+  const separatorLine = keySeparator === ',' ? '' : `  static keySeparator = ${JSON.stringify(keySeparator)};\n`
+  return `  static primaryKey = ${JSON.stringify(primaryKey)} as const;\n` + separatorLine
+}
+
 export function generateModelFile(
   modelFqcn: string,
   modelSchema: VifrostModelSchema,
@@ -154,7 +169,7 @@ export function generateModelFile(
     `${importLines.join('\n')}\n\n` +
     `export class ${className} extends Model {\n` +
     `  static resource = ${JSON.stringify(modelSchema.resource)};\n` +
-    `  static primaryKey = ${JSON.stringify(modelSchema.primaryKey)};\n` +
+    generatePrimaryKeyLines(modelSchema.primaryKey ?? 'id', options.keySeparator ?? ',') +
     `  static maxLimit = ${JSON.stringify(modelSchema.maxLimit)};\n` +
     `  static relations = ${JSON.stringify(relationNamesWithMethod)};\n\n` +
     `${attributesBlock}\n` +
@@ -164,11 +179,27 @@ export function generateModelFile(
   return { fileName: `${className}.ts`, content }
 }
 
+/**
+ * Generates one file per model plus an `index.ts` barrel. Models without a primary key are left out,
+ * since the client cannot address their records, and reported through `options.onWarning`.
+ *
+ * @param {VifrostSchema} schema the Laravel schema export
+ * @param {GenerateOptions} options
+ * @returns {GeneratedFile[]}
+ */
 export function generateSchema(schema: VifrostSchema, options: GenerateOptions = {}): GeneratedFile[] {
-  const generatedModelFqcns = new Set(Object.keys(schema.models))
+  const modelEntries = Object.entries(schema.models).filter(([modelFqcn, modelSchema]) => {
+    if (modelSchema.primaryKey !== null) {
+      return true
+    }
+    options.onWarning?.(`Skipped ${modelFqcn}: its table has no primary key.`)
+    return false
+  })
+  const generatedModelFqcns = new Set(modelEntries.map(([modelFqcn]) => modelFqcn))
+  const fileOptions = { keySeparator: schema.compositeKeySeparator, ...options }
 
-  const modelFiles = Object.entries(schema.models).map(([modelFqcn, modelSchema]) =>
-    generateModelFile(modelFqcn, modelSchema, generatedModelFqcns, options)
+  const modelFiles = modelEntries.map(([modelFqcn, modelSchema]) =>
+    generateModelFile(modelFqcn, modelSchema, generatedModelFqcns, fileOptions)
   )
 
   const indexContent =
