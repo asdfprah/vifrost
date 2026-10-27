@@ -103,3 +103,25 @@ jobs:
 
       - name: Run tests
         run: vendor/bin/pest
+
+  adapters:
+    runs-on: ubuntu-latest
+    name: npm adapters
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - run: npm install -g npm@latest
+
+      - run: npm ci
+        working-directory: adapters
+
+      - run: npm run build
+        working-directory: adapters
+
+      - run: npm test
+        working-directory: adapters
