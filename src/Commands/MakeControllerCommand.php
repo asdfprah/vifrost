@@ -3,6 +3,7 @@
 namespace Vifrost\Laravel\Commands;
 
 use Vifrost\Laravel\Commands\VifrostCommand;
+use Vifrost\Laravel\Describer;
 use Vifrost\Laravel\Mapper;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputOption;
@@ -43,7 +44,8 @@ class MakeControllerCommand extends VifrostCommand
         $includes = $this->getIncludes( $this->getModel() );
         return [
             "model" => $model,
-            "includes" => $includes
+            "includes" => $includes,
+            "keys" => implode(', ', array_map(fn ($column) => "'{$column}'", $this->getKeyColumns())),
         ];
     }
 
@@ -69,8 +71,20 @@ class MakeControllerCommand extends VifrostCommand
 	 */
 	protected function getStub()
 	{
-		return  dirname( dirname(__FILE__) ).'/Stubs/Controller.stub';
+		$stub = count($this->getKeyColumns()) > 1 ? 'Controller.composite.stub' : 'Controller.stub';
+		return  dirname( dirname(__FILE__) ).'/Stubs/'.$stub;
 	}
+
+    /**
+     * Primary key columns of the model the controller is generated for
+     *
+     * @return array
+     */
+    protected function getKeyColumns(): array
+    {
+        $model = $this->getModel();
+        return Describer::primaryKeyColumns(new $model);
+    }
 
 	/**
 	 * Get the default namespace for the class.

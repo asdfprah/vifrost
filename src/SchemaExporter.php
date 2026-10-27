@@ -36,7 +36,7 @@ class SchemaExporter{
             // model keys, letting external tooling join them reliably.
             $schema[ltrim($model, '\\')] = [
                 'table' => $instance->getTable(),
-                'primaryKey' => $instance->getKeyName(),
+                'primaryKey' => self::primaryKeyFor($instance),
                 // The actual URL segment Vifrost routes this model under (see
                 // MakeAPICommand::handle()) — NOT the same as the DB table name,
                 // which is typically pluralized/snake_case while this is the
@@ -50,8 +50,25 @@ class SchemaExporter{
 
         return [
             'schemaVersion' => self::SCHEMA_VERSION,
+            'compositeKeySeparator' => config('vifrost.composite_key_separator', ','),
             'models' => $schema,
         ];
+    }
+
+    /**
+     * The primary key column name, the list of column names of a composite key, or null for a
+     * table without a primary key.
+     *
+     * @param \Illuminate\Database\Eloquent\Model $instance
+     * @return string|array|null
+     */
+    private static function primaryKeyFor($instance){
+        $columns = Describer::primaryKeyColumns($instance);
+        return match (count($columns)) {
+            0 => null,
+            1 => $columns[0],
+            default => $columns,
+        };
     }
 
     /**

@@ -204,6 +204,26 @@ class Describer{
     }
 
     /**
+     * Returns the primary key columns of a given model: its Eloquent key name when it has one,
+     * otherwise the columns of its table's primary index, which is how a composite key is declared.
+     *
+     * @param Model $model
+     * @return array
+     */
+    public static function primaryKeyColumns(Model $model):array{
+        if( !is_null($model->getKeyName()) ){
+            return [$model->getKeyName()];
+        }
+        $indexes = Schema::connection( $model->getConnection()->getName() )->getIndexes( $model->getTable() );
+        foreach ($indexes as $index) {
+            if( $index['primary'] ){
+                return $index['columns'];
+            }
+        }
+        return [];
+    }
+
+    /**
      * Generates a description of the table of a given model
      *
      * @param Model $model Model wich table is gonna be described
