@@ -1,3 +1,16 @@
+## [0.4.0](https://github.com/asdfprah/vifrost/compare/vifrost-vue-v0.3.0...vifrost-vue-v0.4.0) (2026-10-30)
+
+### Features
+
+* **client:** keep watched queries in sync through the Registry ([08b552a](https://github.com/asdfprah/vifrost/commit/08b552a02cd39c6f154d07d7073b8a5256b12a9d)), closes [#28](https://github.com/asdfprah/vifrost/issues/28)
+* **codegen:** generate composite primary keys ([26e7896](https://github.com/asdfprah/vifrost/commit/26e789687d9fa3f4e310b075425648e6aaf0cc69)), closes [#26](https://github.com/asdfprah/vifrost/issues/26)
+* **laravel:** add a sync endpoint that refreshes lists in one request ([bb091ae](https://github.com/asdfprah/vifrost/commit/bb091ae957c0d35b200a6d96ec30ab1b362ccc2f)), closes [#28](https://github.com/asdfprah/vifrost/issues/28)
+* **vue:** back useQuery with the client's QueryCache ([1fb4cec](https://github.com/asdfprah/vifrost/commit/1fb4cec61ce7c0c959896a973ecb5be79f8ae869)), closes [#29](https://github.com/asdfprah/vifrost/issues/29)
+
+### Bug Fixes
+
+* **codegen:** map Postgres bpchar, timestamptz, timetz, inet and macaddr ([526162b](https://github.com/asdfprah/vifrost/commit/526162b3fcb4808c062aa86f971743b829a4e636)), closes [#25](https://github.com/asdfprah/vifrost/issues/25)
+
 ## [0.3.0](https://github.com/asdfprah/vifrost/compare/vifrost-vue-v0.2.2...vifrost-vue-v0.3.0) (2026-10-27)
 
 ### Features
