@@ -1,11 +1,12 @@
-import { getRegistry } from '@vifrost/client'
-import type { Model, ModelConstructor, QueryBuilder } from '@vifrost/client'
+import { getQueryCache } from '@vifrost/client'
+import type { Model, QueryBuilder, QueryHandle, QuerySnapshot } from '@vifrost/client'
 import { onScopeDispose, ref, toValue, watchEffect } from 'vue'
 import type { MaybeRefOrGetter, Ref } from 'vue'
 import type { QueryResource } from './types.js'
 
 /**
- * Reactive wrapper around a {@link QueryBuilder}'s `get()`.
+ * Reactive wrapper around a {@link QueryBuilder}'s `get()`, backed by the
+ * client's shared `QueryCache`.
  *
  * @remarks
  * Pass a getter (`() => Category.where('parent_id', props.parentId)`) rather
@@ -13,11 +14,16 @@ import type { QueryResource } from './types.js'
  * reasoning as {@link useModel}: `setup()` runs once, so only a getter lets
  * Vue re-run the query when a dependency it reads changes.
  *
- * If a `Registry` was passed to `configure()`, each row is already tracked
- * individually by `Model.instantiate()` (the same one `find`/`all` use), so
- * this subscribes to every row in the current result and keeps the array in
- * sync: an "updated" event replaces that row in place, a "deleted" event
- * removes it — no extra network calls beyond the query itself.
+ * Components watching the same query share one request. With a `Registry`
+ * configured, the query also stays in sync: an updated row is replaced in
+ * place, a deleted one is removed and lowers `total`, and every record the
+ * Registry reports created, updated or deleted (saved or deleted locally, or
+ * reported through `events` from `@vifrost/client`) refreshes the lists of its
+ * resource, which is how a new record enters a list and a changed one leaves
+ * or moves.
+ *
+ * @param {MaybeRefOrGetter<QueryBuilder<T>>} source the query, or a getter returning it
+ * @returns {QueryResource<T>}
  */
 export function useQuery<T extends Model>(source: MaybeRefOrGetter<QueryBuilder<T>>): QueryResource<T> {
   const data = ref<T[]>([]) as Ref<T[]>
@@ -25,80 +31,48 @@ export function useQuery<T extends Model>(source: MaybeRefOrGetter<QueryBuilder<
   const isLoading = ref(false)
   const total = ref(0)
 
-  let unsubscribes: Array<() => void> = []
-  let latestRequestId = 0
+  let handle: QueryHandle<T> | null = null
+  let unsubscribe: (() => void) | null = null
 
-  function stopSubscriptions(): void {
-    for (const unsubscribe of unsubscribes) {
-      unsubscribe()
-    }
-    unsubscribes = []
+  /**
+   * @param {QuerySnapshot<T>} snapshot
+   * @returns {void}
+   */
+  function apply(snapshot: QuerySnapshot<T>): void {
+    data.value = snapshot.rows
+    error.value = snapshot.error
+    isLoading.value = snapshot.isLoading
+    total.value = snapshot.total
   }
 
-  function subscribeToResults(rows: T[]): void {
-    const registry = getRegistry()
-    if (!registry) {
-      return
-    }
-
-    unsubscribes = rows.flatMap((row) => {
-      const rowConstructor = row.constructor as ModelConstructor<T>
-      const rowId = rowConstructor.keyOf(row)
-      if (rowId === null) {
-        return []
-      }
-
-      const unsubscribe = registry.subscribe<T>(rowConstructor.resource, rowId, (event) => {
-        const index = data.value.findIndex((item) => rowConstructor.keyOf(item) === rowId)
-        if (index === -1) {
-          return
-        }
-        if (event.type === 'updated') {
-          data.value.splice(index, 1, event.value)
-        } else {
-          data.value.splice(index, 1)
-        }
-      })
-      return [unsubscribe]
-    })
-  }
-
-  async function load(): Promise<void> {
-    const requestId = ++latestRequestId
-    stopSubscriptions()
-
-    const builder = toValue(source)
-    isLoading.value = true
-    error.value = null
-
-    try {
-      const rows = await builder.get()
-      if (requestId !== latestRequestId) {
-        return
-      }
-      data.value = rows
-      total.value = rows.total
-      subscribeToResults(rows)
-    } catch (caught) {
-      if (requestId !== latestRequestId) {
-        return
-      }
-      error.value = caught
-      data.value = []
-      total.value = 0
-    } finally {
-      if (requestId === latestRequestId) {
-        isLoading.value = false
-      }
-    }
+  /**
+   * Stops watching the current query.
+   *
+   * @returns {void}
+   */
+  function stop(): void {
+    unsubscribe?.()
+    handle?.release()
+    unsubscribe = null
+    handle = null
   }
 
   watchEffect(() => {
-    toValue(source)
-    load()
+    const next = getQueryCache().watch(toValue(source))
+    stop()
+    handle = next
+    unsubscribe = next.subscribe(apply)
+    apply(next.snapshot())
   })
 
-  onScopeDispose(stopSubscriptions)
+  onScopeDispose(stop)
 
-  return { data, error, isLoading, refetch: load, total }
+  /**
+   * @returns {Promise<void>}
+   */
+  function refetch(): Promise<void> {
+    return handle ? handle.refetch() : Promise.resolve()
+  }
+
+  return { data, error, isLoading, refetch, total }
 }

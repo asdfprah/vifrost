@@ -1,4 +1,4 @@
-import { Model, Registry, configure, resetClient } from '@vifrost/client'
+import { Model, Registry, configure, events, resetClient } from '@vifrost/client'
 import { effectScope, nextTick, ref } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useQuery } from '../src/useQuery.js'
@@ -191,5 +191,48 @@ describe('useQuery with a composite primary key', () => {
     registry.remove('staffmemberrole', '5,3')
 
     expect(data.value.map((row) => row.level)).toEqual([9])
+  })
+})
+
+describe('useQuery keeping lists in sync (issues #28 and #29)', () => {
+  let registry: Registry
+
+  beforeEach(() => {
+    registry = new Registry()
+    configure({ baseUrl: 'https://api.test', fetch: fetchMock as unknown as typeof fetch, registry })
+  })
+
+  it('lowers total when the registry removes a row', async () => {
+    fetchMock.mockResolvedValue(jsonResponseWithTotal([{ id: 1, name: 'a' }, { id: 2, name: 'b' }], 57))
+    const { data, total, isLoading } = scope.run(() => useQuery(Product.query().limit(20)))!
+    await vi.waitFor(() => expect(isLoading.value).toBe(false))
+
+    registry.remove('product', 1)
+
+    expect(data.value.map((row) => row.id)).toEqual([2])
+    expect(total.value).toBe(56)
+  })
+
+  it('shows a record created elsewhere once events reports it', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponseWithTotal([{ id: 1, name: 'a' }], 1))
+    const { data, total, isLoading } = scope.run(() => useQuery(Product.query().limit(20)))!
+    await vi.waitFor(() => expect(isLoading.value).toBe(false))
+
+    fetchMock.mockResolvedValueOnce(jsonResponseWithTotal([{ id: 1, name: 'a' }, { id: 2, name: 'b' }], 2))
+    events.created(Product, 2)
+
+    await vi.waitFor(() => expect(data.value.map((row) => row.id)).toEqual([1, 2]))
+    expect(total.value).toBe(2)
+  })
+
+  it('shares one request between components watching the same query', async () => {
+    fetchMock.mockResolvedValue(jsonResponseWithTotal([{ id: 1, name: 'a' }], 1))
+
+    const first = scope.run(() => useQuery(Product.query().limit(5)))!
+    const second = scope.run(() => useQuery(Product.query().limit(5)))!
+    await vi.waitFor(() => expect(first.isLoading.value).toBe(false))
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(second.data.value.map((row) => row.id)).toEqual([1])
   })
 })
