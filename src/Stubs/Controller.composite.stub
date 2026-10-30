@@ -6,6 +6,7 @@ use App\Models\DummyCode:model;
 use App\Http\Requests\StoreDummyCode:modelRequest;
 use App\Http\Requests\UpdateDummyCode:modelRequest;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Spatie\QueryBuilder\QueryBuilder;
 use Vifrost\Laravel\Pagination;
 use Vifrost\Laravel\Vifrost;
@@ -25,8 +26,7 @@ class DummyCode:modelController extends Controller
     private const KEY = [DummyCode:keys];
 
     /**
-     * Filters index()/show() both accept, kept in one place so the two never
-     * drift out of sync with each other.
+     * Filters query() accepts, for index() and show() alike.
      *
      * @return array
      */
@@ -36,8 +36,7 @@ class DummyCode:modelController extends Controller
     }
 
     /**
-     * Includes index()/show() both accept, kept in one place so the two never
-     * drift out of sync with each other.
+     * Includes query() accepts, for index() and show() alike.
      *
      * @return array
      */
@@ -49,30 +48,34 @@ class DummyCode:modelController extends Controller
     }
 
     /**
+     * Builds the query index() and show() run for a request. Vifrost's sync endpoint
+     * also calls it, with a request built from a client's query string, to refresh the
+     * lists a client shows when records change. Customize the query here rather than
+     * in index() (e.g. scoping it to the current tenant), so both stay in sync.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Spatie\QueryBuilder\QueryBuilder
+     */
+    public function query(Request $request): QueryBuilder
+    {
+        return QueryBuilder::for( (new Vifrost)->getQuery($request), $request )
+            ->allowedFilters($this->allowedFilters())
+            ->allowedIncludes($this->allowedIncludes())
+            ->allowedSorts(['id', 'created_at', 'updated_at']);
+    }
+
+    /**
      * Display a listing of the resource.
      *
      * @return \Illuminate\Http\JsonResponse
      */
     public function index(): JsonResponse
     {
-        $query = (new Vifrost)->getQuery();
-
-        $queryBuilder = QueryBuilder::for( $query )
-            ->allowedFilters($this->allowedFilters())
-            ->allowedIncludes($this->allowedIncludes())
-            ->allowedSorts(['id', 'created_at', 'updated_at']);
+        $queryBuilder = $this->query(request());
 
         $total = $queryBuilder->toBase()->getCountForPagination();
 
-        $limit = Pagination::resolveLimit(DummyCode:model::class);
-
-        if( is_null($limit) && request()->has('offset') ){
-            abort(422, '?offset= requires ?limit= to also be provided for this resource.');
-        }
-
-        if( ! is_null($limit) ){
-            $queryBuilder->limit($limit)->offset(Pagination::resolveOffset());
-        }
+        Pagination::apply($queryBuilder, DummyCode:model::class);
 
         return response()->json($queryBuilder->get())
             ->header('X-Total-Count', $total);
@@ -103,12 +106,7 @@ class DummyCode:modelController extends Controller
      */
     public function show($id): DummyCode:model
     {
-        $query = (new Vifrost)->getQuery();
-
-        return QueryBuilder::for( $query )
-            ->allowedFilters($this->allowedFilters())
-            ->allowedIncludes($this->allowedIncludes())
-            ->firstOrFail();
+        return $this->query(request())->firstOrFail();
     }
 
     /**

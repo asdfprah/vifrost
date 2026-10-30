@@ -149,3 +149,16 @@ it('responds 404 from the generated show() for a missing composite key', functio
 
     (new $controllerClass())->show("{$this->member->id},99");
 })->throws(ModelNotFoundException::class);
+
+it('syncs a list through the generated controller query(), returning composite keys as value lists', function () {
+    generatedStaffMemberRoleControllerClass();
+    config(['vifrost.sync_route.middleware' => []]);
+    Vifrost::syncRoute();
+
+    $result = $this->postJson('/api/_vifrost/sync', [
+        'queries' => [['path' => 'staffmemberrole?limit=10', 'known' => [[$this->member->id, 3]]]],
+    ])->json('results.0');
+
+    expect($result['ids'])->toBe([[$this->member->id, 3], [$this->member->id, 4]])
+        ->and(array_column($result['rows'], 'role_id'))->toBe([4]);
+});

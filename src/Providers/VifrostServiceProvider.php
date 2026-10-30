@@ -9,6 +9,7 @@ use Vifrost\Laravel\Commands\MakeControllerCommand;
 use Vifrost\Laravel\Commands\MakeRequestCommand;
 use Vifrost\Laravel\Commands\SchemaCommand;
 use Vifrost\Laravel\SchemaExporter;
+use Vifrost\Laravel\Vifrost;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
@@ -48,7 +49,11 @@ class VifrostServiceProvider extends ServiceProvider
         if (config('vifrost.expose_schema_route')) {
             Route::get(config('vifrost.schema_route_path', 'api/_schema'), function () {
                 return response()->json(SchemaExporter::build());
-            });
+            })->middleware(config('vifrost.schema_route_middleware', []));
+        }
+
+        if (config('vifrost.sync_route.enabled')) {
+            Vifrost::syncRoute();
         }
 
         $srcPath = $this->getSrcPath();

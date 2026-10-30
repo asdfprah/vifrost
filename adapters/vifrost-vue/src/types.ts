@@ -10,11 +10,10 @@ export interface AsyncResource<T> {
 
 /**
  * What {@link useQuery} returns — {@link AsyncResource} plus `total`, the
- * `X-Total-Count` of the last successful fetch (see
+ * `X-Total-Count` the server reported for the query (see
  * `ModelCollection.total` in `@vifrost/client`), for building a pager
- * without reaching into `data.value.total` by hand. Only reflects the last
- * `load()`/`refetch()`: a row a `Registry` subscription splices in/out of
- * `data` afterward (see `useQuery`'s remarks) does not adjust it.
+ * without reaching into `data.value.total` by hand. It goes down when the
+ * `Registry` reports a row of the list deleted, and follows every refresh.
  */
 export interface QueryResource<T> extends AsyncResource<T[]> {
   total: Ref<number>
