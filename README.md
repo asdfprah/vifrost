@@ -73,6 +73,17 @@ return [
     // instead of from the file the artisan command writes.
     'expose_schema_route' => false,
     'schema_route_path'   => 'api/_schema',
+    // Middleware for the schema route, e.g. ['api', 'auth:sanctum'].
+    'schema_route_middleware' => [],
+
+    // Off by default: the endpoint @vifrost/client calls to refresh its lists in one
+    // request when records change — see "Keeping lists in sync" below.
+    'sync_route' => [
+        'enabled'     => false,
+        'path'        => 'api/_vifrost/sync',
+        'middleware'  => ['api'],
+        'max_queries' => 20,
+    ],
 
     // Hard ceiling on rows a collection query (index, or a nested relation
     // collection) returns per request, applied even with no ?limit= at all.
@@ -392,6 +403,55 @@ unsubscribe()
 Without a `Registry` configured, `save()`/`delete()` skip this entirely — the
 modularity is deliberate: a consumer who only wants the plain query API never pays
 for tracking it doesn't use.
+
+### 2.3 Keeping lists in sync
+
+Lists watched through `@vifrost/vue`'s `useQuery` (or `getQueryCache().watch()`)
+always share one request per identical query. With a `Registry` configured they also
+stay in sync: rows follow the Registry, and the lists of a resource refresh when the
+Registry reports one of its records created, updated or deleted, so a new record
+enters the lists it belongs to and a changed one moves or leaves. Without a `Registry`,
+lists only change when refetched.
+
+Local `save()`/`delete()` report to the Registry on their own. Changes made elsewhere
+(another tab, another user) are reported with `events`, typically from a real-time
+transport such as Laravel Echo with model broadcasting. Events carry only the record's
+id, and `events` encodes it with the model's key the way the Registry tracks it
+(`registry.created()`, `registry.updated()` and `registry.remove()` take the encoded id
+directly). An update re-fetches the record once if it is tracked, which also refreshes
+every list showing it:
+
+```typescript
+import { events } from '@vifrost/client'
+
+echo.private(`clinic.${clinicId}.patients`)
+  .listen('.PatientCreated', (event) => events.created(Patient, event.id))
+  .listen('.PatientUpdated', (event) => events.updated(Patient, event.id))
+  .listen('.PatientDeleted', (event) => events.deleted(Patient, event.id))
+```
+
+Events that arrive close together (`debounceMs`, 50 by default) are handled at once.
+By default each affected list is refetched. To refresh them all in a single request,
+enable `sync_route` on the Laravel side and point the client at it:
+
+```typescript
+configure({
+  baseUrl: 'https://api.example.com/api',
+  registry,
+  sync: { path: '_vifrost/sync', debounceMs: 50, maxQueries: 20 },
+})
+```
+
+The endpoint runs each list through the `query()` method of its generated controller,
+with filters, sorts, includes and pagination taken from the list's query string, and
+returns the page's ids, the total and only the rows the client does not have yet.
+Because it does not dispatch a request per list, **the route middleware of each list
+does not run**: `sync_route.middleware` guards them all (add your auth middleware
+there), and any customization of a list (e.g. scoping it to the current tenant) must
+live in the controller's `query()`, which `index()` and `show()` also use, rather than
+in `index()`. Controllers generated before `query()` existed, or an endpoint that is
+disabled, make the client fall back to refetching. To register the endpoint inside a
+route group of your own, leave `enabled` false and call `Vifrost::syncRoute()` there.
 
 ---
 
