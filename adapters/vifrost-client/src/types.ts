@@ -1,3 +1,4 @@
+import type { HttpClient } from './HttpClient.js'
 import type { Model } from './Model.js'
 import type { QueryBuilder } from './QueryBuilder.js'
 import type { Registry } from './Registry.js'
@@ -40,6 +41,24 @@ export interface ConfigureOptions extends HttpClientOptions {
   registry?: Registry
   /** @defaultValue `'warn'` */
   unloadedRelationAccess?: UnloadedRelationAccess
+  sync?: SyncOptions
+}
+
+/**
+ * How {@link QueryCache} refreshes the lists it holds when records change.
+ *
+ * @remarks
+ * Without `path`, each affected list is refetched. With it, the lists are refreshed in
+ * one request to the Laravel package's sync endpoint (`vifrost.sync_route`), falling back
+ * to refetching when the endpoint is missing or a list's controller cannot be synced.
+ */
+export interface SyncOptions {
+  /** Path of the sync endpoint, relative to `baseUrl`, e.g. `'_vifrost/sync'`. */
+  path?: string
+  /** @defaultValue `50` — milliseconds to wait for more record events before refreshing. */
+  debounceMs?: number
+  /** @defaultValue `20` — lists per sync request; must not exceed `vifrost.sync_route.max_queries`. */
+  maxQueries?: number
 }
 
 /**
@@ -111,9 +130,56 @@ export type RegistryEvent<T> = RegistryUpdatedEvent<T> | RegistryDeletedEvent
 
 export type RegistryListener<T> = (event: RegistryEvent<T>) => void
 
+/**
+ * A change to some record of a resource, published by the {@link Registry} whether or not
+ * that record is tracked — what lists of the resource listen to, since a created or
+ * changed record can enter or leave them.
+ */
+export interface RegistryResourceEvent {
+  type: 'created' | 'updated' | 'deleted'
+  id: string | number
+}
+
+export type RegistryResourceListener = (resourceType: string, event: RegistryResourceEvent) => void
+
 /** One {@link Registry} bookkeeping entry. */
 export interface RegistryEntry<T> {
   value: T
   resync: ResyncFn<T>
   listeners: Set<RegistryListener<T>>
+}
+
+/** The current state of a query held by {@link QueryCache}. */
+export interface QuerySnapshot<T> {
+  rows: T[]
+  total: number
+  error: unknown
+  isLoading: boolean
+}
+
+export type QueryListener<T> = (snapshot: QuerySnapshot<T>) => void
+
+/** What {@link QueryCache.watch} returns: a live view of one query, released when no longer needed. */
+export interface QueryHandle<T> {
+  snapshot(): QuerySnapshot<T>
+  subscribe(listener: QueryListener<T>): () => void
+  refetch(): Promise<void>
+  release(): void
+}
+
+/** What a {@link QueryCache} works with. */
+export interface QueryCacheOptions {
+  /** Keeps rows in sync and reports record changes; without it, lists only refresh on demand. */
+  registry: Registry | null
+  sync: SyncOptions
+  /** The HTTP client to call the sync endpoint with, resolved when a sync is made. */
+  http: () => HttpClient
+}
+
+/** One query's result in a response of the Laravel sync endpoint. */
+export interface SyncResult {
+  status: number
+  ids?: unknown[]
+  total?: number
+  rows?: Record<string, unknown>[]
 }

@@ -182,7 +182,8 @@ export class Model {
         )
         return this.instantiate(row, includes)
       },
-      this.maxLimit
+      this.maxLimit,
+      this
     )
   }
 
@@ -193,13 +194,16 @@ export class Model {
    * Registers the saved value with the {@link Registry}, if one is
    * configured, the same way `find`/`all`/`query` do — so a create is
    * discoverable by a later `subscribe`, and an update notifies whoever
-   * already subscribed to this record from an earlier fetch.
+   * already subscribed to this record from an earlier fetch. It also tells
+   * the Registry's resource listeners (such as the lists of `QueryCache`),
+   * since a created or updated record can enter or leave them.
    */
   async save(): Promise<this> {
     const modelConstructor = this.constructor as ModelConstructor
     const attributes: Record<string, unknown> = { ...this }
+    const isUpdate = this.isPersisted()
 
-    const { body: updatedRow } = this.isPersisted()
+    const { body: updatedRow } = isUpdate
       ? await client().put<Record<string, unknown>>(`${modelConstructor.resource}/${this.primaryKeyValue()}`, attributes)
       : await client().post<Record<string, unknown>>(modelConstructor.resource, attributes)
 
@@ -210,6 +214,7 @@ export class Model {
     const savedId = modelConstructor.keyOf(this)
     if (registry && savedId !== null) {
       registry.track(modelConstructor.resource, savedId, this, () => modelConstructor.find(savedId))
+      registry.publish(modelConstructor.resource, { type: isUpdate ? 'updated' : 'created', id: savedId })
     }
 
     return this

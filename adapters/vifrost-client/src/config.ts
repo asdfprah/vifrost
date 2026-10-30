@@ -1,16 +1,22 @@
 import { HttpClient } from './HttpClient.js'
-import type { ConfigureOptions, UnloadedRelationAccess } from './types.js'
+import { QueryCache } from './QueryCache.js'
+import type { ConfigureOptions, SyncOptions, UnloadedRelationAccess } from './types.js'
 import type { Registry } from './Registry.js'
 
 let sharedHttpClient: HttpClient | null = null
 let sharedRegistry: Registry | null = null
 let sharedUnloadedRelationAccess: UnloadedRelationAccess = 'warn'
+let sharedSyncOptions: SyncOptions = {}
+let sharedQueryCache: QueryCache | null = null
 
 /** Call once, before any {@link Model} method is used. */
 export function configure(options: ConfigureOptions): void {
   sharedHttpClient = new HttpClient(options)
   sharedRegistry = options.registry ?? null
   sharedUnloadedRelationAccess = options.unloadedRelationAccess ?? 'warn'
+  sharedSyncOptions = options.sync ?? {}
+  sharedQueryCache?.dispose()
+  sharedQueryCache = null
 }
 
 /** @throws if {@link configure} hasn't been called yet */
@@ -35,9 +41,31 @@ export function getUnloadedRelationAccess(): UnloadedRelationAccess {
   return sharedUnloadedRelationAccess
 }
 
+/**
+ * The sync options passed to {@link configure}.
+ *
+ * @returns {SyncOptions}
+ */
+export function getSyncOptions(): SyncOptions {
+  return sharedSyncOptions
+}
+
+/**
+ * The {@link QueryCache} shared by every reactive query of this client, created on first use.
+ *
+ * @returns {QueryCache}
+ */
+export function getQueryCache(): QueryCache {
+  sharedQueryCache ??= new QueryCache({ registry: sharedRegistry, sync: sharedSyncOptions, http: client })
+  return sharedQueryCache
+}
+
 /** Test-only: clears the configured client/registry so each test starts clean. */
 export function resetClient(): void {
   sharedHttpClient = null
   sharedRegistry = null
   sharedUnloadedRelationAccess = 'warn'
+  sharedSyncOptions = {}
+  sharedQueryCache?.dispose()
+  sharedQueryCache = null
 }

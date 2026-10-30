@@ -1,7 +1,7 @@
 import { buildQueryString, createQueryState } from './queryString.js'
 import { toModelCollection } from './ModelCollection.js'
 import type { ModelCollection } from './ModelCollection.js'
-import type { ModelId, QueryState } from './types.js'
+import type { ModelConstructor, ModelId, QueryState } from './types.js'
 
 /**
  * Fluent query builder returned by {@link Model.query}.
@@ -22,8 +22,70 @@ export class QueryBuilder<T> {
     private readonly path: string,
     private readonly fetchMany: (path: string, includes: string[]) => Promise<ModelCollection<T>>,
     private readonly fetchOne: (id: ModelId, includes: string[]) => Promise<T>,
-    private readonly maxLimit: number | null
+    private readonly maxLimit: number | null,
+    private readonly model?: ModelConstructor
   ) {}
+
+  /**
+   * The resource this query reads.
+   *
+   * @returns {string}
+   */
+  getResource(): string {
+    return this.path
+  }
+
+  /**
+   * The model class whose rows this query returns, when built by `Model.query()`.
+   *
+   * @returns {ModelConstructor | undefined}
+   */
+  getModel(): ModelConstructor | undefined {
+    return this.model
+  }
+
+  /**
+   * The relations this query eager-loads.
+   *
+   * @returns {string[]}
+   */
+  getIncludes(): string[] {
+    return [...this.state.includes]
+  }
+
+  /**
+   * Whether this query reads one record by id instead of a collection.
+   *
+   * @returns {boolean}
+   */
+  isSingle(): boolean {
+    return this.explicitId !== undefined
+  }
+
+  /**
+   * Whether this collection query requests a page (`limit`) rather than every row.
+   *
+   * @returns {boolean}
+   */
+  isPaginated(): boolean {
+    return this.state.limit !== undefined
+  }
+
+  /**
+   * The path this query requests, relative to the API root, including its query string.
+   * Identical queries share it, which is what {@link QueryCache} keys them by.
+   *
+   * @returns {string}
+   */
+  toPath(): string {
+    if (this.explicitId === undefined) {
+      return `${this.path}${this.toQueryString()}`
+    }
+    const id = this.model ? this.model.encodeId(this.explicitId) : this.explicitId
+    const includesOnly = createQueryState()
+    includesOnly.includes = this.state.includes
+    return `${this.path}/${id}${buildQueryString(includesOnly)}`
+  }
 
   where(field: string, value: string | number | boolean): this {
     this.state.wheres[field] = String(value)
