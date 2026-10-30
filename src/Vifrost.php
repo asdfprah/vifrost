@@ -7,6 +7,9 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Pivot;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
+use Vifrost\Laravel\Http\SyncController;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use ReflectionClass;
@@ -128,15 +131,16 @@ class Vifrost
      *
      * This method only resolves and scopes the query — it never applies limit/offset.
      * That's deliberately left to the generated controller (see Controller.stub's
-     * index(), which calls Pagination::resolveLimit()/resolveOffset() itself) instead
-     * of being hidden inside this package: the controller is the one file a developer
-     * actually owns and reads, so pagination should be visible there.
+     * index(), which calls Pagination::apply() itself) instead of being hidden inside
+     * this package: the controller is the one file a developer actually owns and reads,
+     * so pagination should be visible there.
      *
+     * @param \Illuminate\Http\Request|null $request request whose path is resolved; defaults to the current request
      * @return \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Eloquent\Relations\Relation
      */
-    public function getQuery()
+    public function getQuery(?Request $request = null)
     {
-        $path = $this->getRequestPath();
+        $path = $this->getRequestPath($request);
         if (count($path) > 4) {
             abort(404);
         }
@@ -200,13 +204,15 @@ class Vifrost
     }
 
     /**
-     * Retrieves the request path removing the configured excluded sections
-     * 
+     * Retrieves the path sections of the given request, or the current one, without the
+     * configured excluded sections
+     *
+     * @param \Illuminate\Http\Request|null $request defaults to the current request
      * @return array
      */
-    private function getRequestPath()
+    public function getRequestPath(?Request $request = null): array
     {
-        $sections = explode("/", request()->path());
+        $sections = explode("/", ($request ?? request())->path());
         return array_values($this->removeExcluded($sections));
     }
 
@@ -226,25 +232,59 @@ class Vifrost
 
     /**
      * Guess the model based on a string with the model name
-     * 
+     *
+     * @param string $name URL segment naming the model, matched case-insensitively
      * @return string matched model full class name
      */
     private function guessModel($name)
     {
-        $models = $this->models();
-        $match = null;
-        foreach ($models as $model) {
-            $exploded = explode("\\", $model);
-            $className = strtolower(end($exploded));
-            if ($className === strtolower($name)) {
-                $match = $model;
-                break;
-            }
-        }
+        $match = $this->findModel($name);
         if (is_null($match)) {
             throw new Exception("Could not find a matching model for $name", 404);
         }
         return $match;
+    }
+
+    /**
+     * Finds the exposed model whose class basename matches a URL segment
+     *
+     * @param string $name URL segment naming the model, matched case-insensitively
+     * @return string|null matched model full class name
+     */
+    public function findModel(string $name): ?string
+    {
+        foreach ($this->models() as $model) {
+            $exploded = explode("\\", $model);
+            if (strtolower(end($exploded)) === strtolower($name)) {
+                return $model;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Registers the sync endpoint at config('vifrost.sync_route.path'), with
+     * config('vifrost.sync_route.middleware'). The service provider calls it when
+     * config('vifrost.sync_route.enabled') is true; call it from a route group of your
+     * own instead (e.g. with a domain or extra middleware) and leave that option false.
+     *
+     * @return \Illuminate\Routing\Route
+     */
+    public static function syncRoute()
+    {
+        return Route::post(config('vifrost.sync_route.path', 'api/_vifrost/sync'), SyncController::class)
+            ->middleware(config('vifrost.sync_route.middleware', ['api']));
+    }
+
+    /**
+     * Class name of the controller vifrost:api generates for a model
+     *
+     * @param string $modelClass model full classname
+     * @return string
+     */
+    public static function controllerFor(string $modelClass): string
+    {
+        return 'App\\Http\\Controllers\\' . class_basename($modelClass) . 'Controller';
     }
 
     /**

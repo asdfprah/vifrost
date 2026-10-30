@@ -21,6 +21,17 @@ return [
     'schema_path' => storage_path('app/vifrost-schema.json'),
     'expose_schema_route' => false,
     'schema_route_path'   => 'api/_schema',
+    'schema_route_middleware' => [],
+
+    // Endpoint @vifrost/client calls to refresh its lists in one request when records change.
+    // Off by default; when off, the client refetches each list instead. Its middleware guards
+    // every query it runs, since the route middleware of each query does not run.
+    'sync_route' => [
+        'enabled' => false,
+        'path' => 'api/_vifrost/sync',
+        'middleware' => ['api'],
+        'max_queries' => 20,
+    ],
     'max_limit' => 100,
     'max_limit_per_model' => [
         // \App\Models\Category::class => null,
