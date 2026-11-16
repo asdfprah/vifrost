@@ -18,3 +18,28 @@ export interface AsyncResource<T> {
 export interface QueryResource<T> extends AsyncResource<T[]> {
   total: Ref<number>
 }
+
+/**
+ * What {@link useDataset} returns — {@link AsyncResource} of the dataset's rows, plus `total`,
+ * the number of rows the dataset has across pages.
+ */
+export interface DatasetResource<Row> extends AsyncResource<ReadonlyArray<Readonly<Row>>> {
+  total: Ref<number>
+}
+
+/** The state every watched query or dataset reports. */
+export interface WatchedSnapshot<Rows> {
+  rows: Rows
+  total: number
+  error: unknown
+  isLoading: boolean
+}
+
+/** What `useWatched` exposes: the refs behind {@link QueryResource} and {@link DatasetResource}. */
+export interface WatchedResource<Rows> {
+  data: Ref<Rows>
+  error: Ref<unknown>
+  isLoading: Ref<boolean>
+  total: Ref<number>
+  refetch: () => Promise<void>
+}
