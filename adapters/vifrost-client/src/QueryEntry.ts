@@ -1,10 +1,10 @@
 import type { Model } from './Model.js'
 import type { QueryBuilder } from './QueryBuilder.js'
 import type { Registry } from './Registry.js'
-import type { ModelConstructor, ModelId, QueryListener, QuerySnapshot, RegistryEvent, SyncResult } from './types.js'
+import type { ModelConstructor, ModelId, QueryListener, QuerySnapshot, RegistryEvent, SyncResult, WatchedEntry } from './types.js'
 
 /** One query shared by every watcher of the same path. */
-export class QueryEntry<T extends Model> {
+export class QueryEntry<T extends Model> implements WatchedEntry<QuerySnapshot<T>> {
   rows: T[] = []
   total = 0
   error: unknown = null

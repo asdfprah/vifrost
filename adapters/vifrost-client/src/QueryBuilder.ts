@@ -1,7 +1,6 @@
 import { buildQueryString, createQueryState } from './queryString.js'
 import { toModelCollection } from './ModelCollection.js'
-import type { ModelCollection } from './ModelCollection.js'
-import type { ModelConstructor, ModelId, QueryState } from './types.js'
+import type { ModelCollection, ModelConstructor, ModelId, QueryState } from './types.js'
 
 /**
  * Fluent query builder returned by {@link Model.query}.
@@ -18,20 +17,38 @@ export class QueryBuilder<T> {
   private state: QueryState = createQueryState()
   private explicitId?: ModelId
 
+  /**
+   * @param {string} path the collection path, relative to the API root: a resource, or a relation of a record
+   * @param {(path: string, includes: string[]) => Promise<ModelCollection<T>>} fetchMany
+   * @param {(id: ModelId, includes: string[]) => Promise<T>} fetchOne
+   * @param {number | null} maxLimit
+   * @param {ModelConstructor} [model] the model class of the rows
+   * @param {string} [resource] the resource of the rows, when the path is a relation of a record
+   */
   constructor(
     private readonly path: string,
     private readonly fetchMany: (path: string, includes: string[]) => Promise<ModelCollection<T>>,
     private readonly fetchOne: (id: ModelId, includes: string[]) => Promise<T>,
     private readonly maxLimit: number | null,
-    private readonly model?: ModelConstructor
+    private readonly model?: ModelConstructor,
+    private readonly resource: string = path
   ) {}
 
   /**
-   * The resource this query reads.
+   * The resource whose rows this query reads, which is what the lists it is watched in refresh on.
    *
    * @returns {string}
    */
   getResource(): string {
+    return this.resource
+  }
+
+  /**
+   * The collection path this query reads, without its query string.
+   *
+   * @returns {string}
+   */
+  getPath(): string {
     return this.path
   }
 

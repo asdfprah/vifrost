@@ -48,8 +48,13 @@ export class HttpClient {
     return { body: responseBody as ResponseBody, headers: response.headers }
   }
 
-  get<ResponseBody>(path: string): Promise<HttpResponse<ResponseBody>> {
-    return this.request<ResponseBody>(path, { method: 'GET' })
+  /**
+   * @param {string} path
+   * @param {RequestInit} [init] extra request options, such as an `AbortSignal`
+   * @returns {Promise<HttpResponse<ResponseBody>>}
+   */
+  get<ResponseBody>(path: string, init: RequestInit = {}): Promise<HttpResponse<ResponseBody>> {
+    return this.request<ResponseBody>(path, { ...init, method: 'GET' })
   }
 
   post<ResponseBody>(path: string, requestBody?: unknown): Promise<HttpResponse<ResponseBody>> {

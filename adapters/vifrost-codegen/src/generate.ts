@@ -1,6 +1,9 @@
 import { resolveTsType } from './typeMap.js'
 import type {
   VifrostAttribute,
+  VifrostDatasetColumn,
+  VifrostDatasetHas,
+  VifrostDatasetSchema,
   VifrostModelSchema,
   VifrostRelation,
   VifrostSchema,
@@ -124,6 +127,127 @@ function generatePrimaryKeyLines(primaryKey: string | string[], keySeparator: st
   return `  static primaryKey = ${JSON.stringify(primaryKey)} as const;\n` + separatorLine
 }
 
+/**
+ * A property name as it can appear in a type literal, quoted when it is not an identifier.
+ *
+ * @param {string} name
+ * @returns {string}
+ */
+function propertyName(name: string): string {
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) ? name : JSON.stringify(name)
+}
+
+/**
+ * The type literal of the columns a dataset may use, e.g. `{ status: string; total: number | null }`.
+ *
+ * @param {Record<string, VifrostDatasetColumn>} columns
+ * @param {GenerateOptions} options
+ * @returns {string}
+ */
+function datasetColumnsType(columns: Record<string, VifrostDatasetColumn>, options: GenerateOptions): string {
+  const entries = Object.entries(columns).map(([name, column]) => {
+    const tsType = resolveTsType(column, options)
+    return `${propertyName(name)}: ${column.isNullable ? `${tsType} | null` : tsType}`
+  })
+  return entries.length === 0 ? '{}' : `{ ${entries.join('; ')} }`
+}
+
+/**
+ * The type literal of the has levels of a dataset, each with its columns and the levels below.
+ *
+ * @param {Record<string, VifrostDatasetHas>} has
+ * @param {GenerateOptions} options
+ * @param {string} indent
+ * @returns {string}
+ */
+function datasetHasType(has: Record<string, VifrostDatasetHas>, options: GenerateOptions, indent: string): string {
+  const entries = Object.entries(has)
+  if (entries.length === 0) {
+    return '{}'
+  }
+  const inner = `${indent}  `
+  const lines = entries.map(
+    ([name, level]) =>
+      `${inner}${propertyName(name)}: {\n` +
+      `${inner}  columns: ${datasetColumnsType(level.columns, options)};\n` +
+      `${inner}  has: ${datasetHasType(level.has, options, `${inner}  `)};\n` +
+      `${inner}};`
+  )
+  return `{\n${lines.join('\n')}\n${indent}}`
+}
+
+/**
+ * The `{Model}DatasetShape` interface `Dataset.for()` types a model's datasets with.
+ *
+ * @param {string} className
+ * @param {VifrostDatasetSchema} dataset
+ * @param {GenerateOptions} options
+ * @returns {string}
+ */
+function generateDatasetShape(className: string, dataset: VifrostDatasetSchema, options: GenerateOptions): string {
+  const joins = Object.entries(dataset.joins).map(
+    ([name, join]) => `    ${propertyName(name)}: { columns: ${datasetColumnsType(join.columns, options)} };`
+  )
+  const aggregates = dataset.aggregates.length === 0 ? 'never' : dataset.aggregates.map((name) => JSON.stringify(name)).join(' | ')
+
+  return (
+    `/** What the datasets of ${className} allow, as its controller's query() declares it. */\n` +
+    `export interface ${className}DatasetShape {\n` +
+    `  columns: ${datasetColumnsType(dataset.columns, options)};\n` +
+    `  joins: ${joins.length === 0 ? '{}' : `{\n${joins.join('\n')}\n  }`};\n` +
+    `  has: ${datasetHasType(dataset.has, options, '  ')};\n` +
+    `  aggregates: ${aggregates};\n` +
+    `}\n\n`
+  )
+}
+
+/**
+ * The resources of the relations a dataset may join or filter by, by relation path, so a
+ * watched dataset refreshes when their records change.
+ *
+ * @param {VifrostDatasetSchema} dataset
+ * @param {Record<string, string>} resources resource names by model FQCN
+ * @returns {Record<string, string>}
+ */
+function datasetResources(dataset: VifrostDatasetSchema, resources: Record<string, string>): Record<string, string> {
+  const result: Record<string, string> = {}
+  for (const [name, join] of Object.entries(dataset.joins)) {
+    if (resources[join.model]) {
+      result[name] = resources[join.model]
+    }
+  }
+  const visit = (has: Record<string, VifrostDatasetHas>, prefix: string): void => {
+    for (const [name, level] of Object.entries(has)) {
+      const path = prefix === '' ? name : `${prefix}.${name}`
+      if (resources[level.model]) {
+        result[path] = resources[level.model]
+      }
+      visit(level.has, path)
+    }
+  }
+  visit(dataset.has, '')
+  return result
+}
+
+/**
+ * The static members of a model class with datasets enabled.
+ *
+ * @param {string} className
+ * @param {VifrostDatasetSchema | undefined} dataset
+ * @param {Record<string, string>} resources resource names by model FQCN
+ * @returns {string}
+ */
+function generateDatasetLines(className: string, dataset: VifrostDatasetSchema | undefined, resources: Record<string, string>): string {
+  if (!dataset) {
+    return ''
+  }
+  return (
+    `  static datasetMaxLimit = ${JSON.stringify(dataset.maxLimit)};\n` +
+    `  static datasetResources: Record<string, string> = ${JSON.stringify(datasetResources(dataset, resources))};\n` +
+    `  declare static readonly datasetShape: ${className}DatasetShape;\n`
+  )
+}
+
 export function generateModelFile(
   modelFqcn: string,
   modelSchema: VifrostModelSchema,
@@ -167,11 +291,14 @@ export function generateModelFile(
     `// Generated by @vifrost/codegen — do not edit by hand.\n` +
     `// Re-run the generator after the Laravel schema changes instead.\n\n` +
     `${importLines.join('\n')}\n\n` +
+    (modelSchema.dataset ? generateDatasetShape(className, modelSchema.dataset, options) : '') +
     `export class ${className} extends Model {\n` +
     `  static resource = ${JSON.stringify(modelSchema.resource)};\n` +
     generatePrimaryKeyLines(modelSchema.primaryKey ?? 'id', options.keySeparator ?? ',') +
     `  static maxLimit = ${JSON.stringify(modelSchema.maxLimit)};\n` +
-    `  static relations = ${JSON.stringify(relationNamesWithMethod)};\n\n` +
+    `  static relations = ${JSON.stringify(relationNamesWithMethod)};\n` +
+    generateDatasetLines(className, modelSchema.dataset, options.resources ?? {}) +
+    `\n` +
     `${attributesBlock}\n` +
     (relationsBlock ? `\n${relationsBlock}\n` : '') +
     `}\n`
@@ -196,7 +323,8 @@ export function generateSchema(schema: VifrostSchema, options: GenerateOptions =
     return false
   })
   const generatedModelFqcns = new Set(modelEntries.map(([modelFqcn]) => modelFqcn))
-  const fileOptions = { keySeparator: schema.compositeKeySeparator, ...options }
+  const resources = Object.fromEntries(Object.entries(schema.models).map(([modelFqcn, modelSchema]) => [modelFqcn, modelSchema.resource]))
+  const fileOptions = { keySeparator: schema.compositeKeySeparator, resources, ...options }
 
   const modelFiles = modelEntries.map(([modelFqcn, modelSchema]) =>
     generateModelFile(modelFqcn, modelSchema, generatedModelFqcns, fileOptions)

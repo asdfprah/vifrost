@@ -1,14 +1,99 @@
 import { client, getRegistry, getUnloadedRelationAccess } from './config.js'
 import { guardUnloadedRelations } from './RelationGuard.js'
 import { QueryBuilder } from './QueryBuilder.js'
+import { readTotalCount } from './collection.js'
 import { toModelCollection } from './ModelCollection.js'
 import { buildQueryString, createQueryState } from './queryString.js'
-import type { ModelCollection } from './ModelCollection.js'
-import type { ModelConstructor, ModelId, PrimaryKey } from './types.js'
+import type { ModelCollection, ModelConstructor, ModelId, PrimaryKey } from './types.js'
 
 const NO_INCLUDES: string[] = []
 
 const persistedInstances = new WeakSet<object>()
+
+const draftInstances = new WeakSet<object>()
+
+/**
+ * The key Laravel serializes a loaded relation under, with `Model::$snakeAttributes` on.
+ *
+ * @param {string} relationName the relation's method name, e.g. `orderItems`
+ * @returns {string} e.g. `order_items`
+ */
+function snakeCase(relationName: string): string {
+  return relationName.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)
+}
+
+/**
+ * Moves loaded relations of a record from their snake_case keys to their relation names.
+ *
+ * @param {Record<string, unknown>} record a record as the server sent it, changed in place
+ * @param {string[]} relationNames
+ * @returns {void}
+ */
+function renameRelationKeys(record: Record<string, unknown>, relationNames: string[]): void {
+  for (const name of relationNames) {
+    const serializedKey = snakeCase(name)
+    if (serializedKey === name || !hasOwn(record, serializedKey) || hasOwn(record, name)) {
+      continue
+    }
+    record[name] = record[serializedKey]
+    delete record[serializedKey]
+  }
+}
+
+/**
+ * Renames the relations along one dotted include path, through every record of a to-many level.
+ *
+ * @param {unknown} value a record, a list of records, or a relation that was not loaded
+ * @param {string[]} segments the relation names of the path still to rename
+ * @returns {void}
+ */
+function renameIncludePath(value: unknown, segments: string[]): void {
+  if (segments.length === 0) {
+    return
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item) => renameIncludePath(item, segments))
+    return
+  }
+  if (typeof value !== 'object' || value === null) {
+    return
+  }
+  const [name, ...rest] = segments
+  const record = value as Record<string, unknown>
+  renameRelationKeys(record, [name])
+  renameIncludePath(record[name], rest)
+}
+
+/**
+ * A copy of a record's attributes with its loaded relations, and those nested along its
+ * includes, under their relation names instead of the snake_case keys Laravel serializes.
+ *
+ * @param {Record<string, unknown>} attributes a record as the server sent it
+ * @param {string[]} relationNames the relations its model declares
+ * @param {string[]} includes the dotted relation paths it was fetched with
+ * @returns {Record<string, unknown>}
+ */
+function normalizeRelationKeys(
+  attributes: Record<string, unknown>,
+  relationNames: string[],
+  includes: string[]
+): Record<string, unknown> {
+  const normalized = { ...attributes }
+  renameRelationKeys(normalized, relationNames)
+  for (const path of includes) {
+    renameIncludePath(normalized, path.split('.'))
+  }
+  return normalized
+}
+
+/**
+ * @param {object} target
+ * @param {string} key
+ * @returns {boolean} whether the key is an own property of the target
+ */
+function hasOwn(target: object, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(target, key)
+}
 
 /**
  * Base class generated `@vifrost/codegen` subclasses extend.
@@ -102,17 +187,6 @@ export class Model {
   }
 
   /**
-   * Reads `X-Total-Count` off a collection response's headers — how many rows
-   * match the request in total, independent of how many this page returned.
-   * Falls back to the page size itself if the header is missing (an older
-   * backend, or a response mocked without it in a test), so `.total` is
-   * always a valid number rather than `NaN`.
-   */
-  private static readTotalCount(headers: Headers, pageSize: number): number {
-    return Number(headers.get('X-Total-Count') ?? pageSize)
-  }
-
-  /**
    * Wraps raw JSON in a Model instance and, if a {@link Registry} was passed
    * to {@link configure}, registers it so a future "this record changed"
    * event can find and refresh it. Every fetch path (find/all/query/
@@ -131,26 +205,48 @@ export class Model {
     attributes: Record<string, unknown>,
     includes: string[] = NO_INCLUDES
   ): T {
-    const instance = new this(attributes)
+    const instance = new this(normalizeRelationKeys(attributes, this.relations, includes))
     persistedInstances.add(instance)
     const registry = getRegistry()
-    const primaryKeyValue = this.keyOf(attributes)
+    const primaryKeyValue = this.keyOf(instance)
     if (registry && primaryKeyValue !== null) {
-      registry.track(this.resource, primaryKeyValue, instance, () =>
-        this.query()
-          .with(...includes)
-          .whereId(primaryKeyValue)
-          .first() as Promise<T>
+      registry.track(
+        this.resource,
+        primaryKeyValue,
+        instance,
+        (relations = includes) =>
+          this.query()
+            .with(...relations)
+            .whereId(primaryKeyValue)
+            .first() as Promise<T>,
+        includes
       )
     }
 
+    return Model.guard(instance)
+  }
+
+  /**
+   * Wraps a record so reading a relation it did not load as data is reported as the configured
+   * {@link UnloadedRelationAccess} says, keeping what it knows about the record.
+   *
+   * @param {T} instance a record whose own properties are its attributes and loaded relations
+   * @returns {T} the record itself when there is nothing to guard, or a guarding proxy of it
+   */
+  private static guard<T extends Model>(instance: T): T {
+    const modelConstructor = instance.constructor as ModelConstructor
     const mode = getUnloadedRelationAccess()
-    if (mode === 'off' || this.relations.length === 0) {
+    if (mode === 'off' || modelConstructor.relations.length === 0) {
       return instance
     }
-    const unloadedRelationNames = this.relations.filter((name) => !(name in attributes))
+    const unloadedRelationNames = modelConstructor.relations.filter((name) => !hasOwn(instance, name))
     const guarded = guardUnloadedRelations(instance, unloadedRelationNames, mode)
-    persistedInstances.add(guarded)
+    if (persistedInstances.has(instance)) {
+      persistedInstances.add(guarded)
+    }
+    if (draftInstances.has(instance)) {
+      draftInstances.add(guarded)
+    }
     return guarded
   }
 
@@ -165,25 +261,58 @@ export class Model {
   }
 
   static query<T extends Model>(this: ModelConstructor<T>): QueryBuilder<T> {
-    return new QueryBuilder<T>(
-      this.resource,
-      async (path, includes) => {
-        const { body: rows, headers } = await client().get<Record<string, unknown>[]>(path)
+    return Model.collectionQuery(this.resource, this)
+  }
+
+  /**
+   * A query of the records of a relation of one record, read through its nested route
+   * (`GET {resource}/{id}/{relation}`): it supports `where`/`orderBy`/`with`/`limit`/`offset`
+   * like any query of the related model, can be watched with `useQuery`, and stays in sync
+   * like any list of the related resource.
+   *
+   * @param {ModelId} id the key of the record whose relation is read
+   * @param {string} relationName the relation's name, as in the nested route
+   * @param {ModelConstructor<R>} related the related model class
+   * @returns {QueryBuilder<R>}
+   */
+  static related<R extends Model>(
+    this: ModelConstructor,
+    id: ModelId,
+    relationName: string,
+    related: ModelConstructor<R>
+  ): QueryBuilder<R> {
+    return Model.collectionQuery(`${this.resource}/${this.encodeId(id)}/${relationName}`, related)
+  }
+
+  /**
+   * A query of the records a collection path lists, instantiated as a model: the model's own
+   * index, or a relation of one record. Its records are read one by one at `{path}/{id}`.
+   *
+   * @param {string} path the collection path, relative to the API root
+   * @param {ModelConstructor<R>} model the model class of the records
+   * @returns {QueryBuilder<R>}
+   */
+  private static collectionQuery<R extends Model>(path: string, model: ModelConstructor<R>): QueryBuilder<R> {
+    return new QueryBuilder<R>(
+      path,
+      async (pathWithQuery, includes) => {
+        const { body: rows, headers } = await client().get<Record<string, unknown>[]>(pathWithQuery)
         return toModelCollection(
-          rows.map((row) => this.instantiate(row, includes)),
-          Model.readTotalCount(headers, rows.length)
+          rows.map((row) => model.instantiate(row, includes)),
+          readTotalCount(headers, rows.length)
         )
       },
       async (id, includes) => {
         const state = createQueryState()
         state.includes = includes
         const { body: row } = await client().get<Record<string, unknown>>(
-          `${this.resource}/${this.encodeId(id)}${buildQueryString(state)}`
+          `${path}/${model.encodeId(id)}${buildQueryString(state)}`
         )
-        return this.instantiate(row, includes)
+        return model.instantiate(row, includes)
       },
-      this.maxLimit,
-      this
+      model.maxLimit,
+      model,
+      model.resource
     )
   }
 
@@ -197,6 +326,11 @@ export class Model {
    * already subscribed to this record from an earlier fetch. It also tells
    * the Registry's resource listeners (such as the lists of `QueryCache`),
    * since a created or updated record can enter or leave them.
+   *
+   * A copy made with {@link Model.clone} stays apart from the Registry: a copy of it with the
+   * saved values replaces the tracked record, and only once the server accepts the change.
+   *
+   * @returns {Promise<this>}
    */
   async save(): Promise<this> {
     const modelConstructor = this.constructor as ModelConstructor
@@ -207,17 +341,42 @@ export class Model {
       ? await client().put<Record<string, unknown>>(`${modelConstructor.resource}/${this.primaryKeyValue()}`, attributes)
       : await client().post<Record<string, unknown>>(modelConstructor.resource, attributes)
 
-    Object.assign(this, updatedRow)
+    Object.assign(this, normalizeRelationKeys(updatedRow, modelConstructor.relations, NO_INCLUDES))
     persistedInstances.add(this)
 
     const registry = getRegistry()
     const savedId = modelConstructor.keyOf(this)
     if (registry && savedId !== null) {
-      registry.track(modelConstructor.resource, savedId, this, () => modelConstructor.find(savedId))
+      const saved = draftInstances.has(this) ? new modelConstructor({ ...this }) : this
+      persistedInstances.add(saved)
+      registry.track(modelConstructor.resource, savedId, saved, (relations = NO_INCLUDES) =>
+        modelConstructor
+          .query()
+          .with(...relations)
+          .whereId(savedId)
+          .first() as Promise<Model>
+      )
       registry.publish(modelConstructor.resource, { type: isUpdate ? 'updated' : 'created', id: savedId })
     }
 
     return this
+  }
+
+  /**
+   * A copy of this record to edit apart from the instance every list and `useModel` shows:
+   * changing it changes nothing else, and its {@link Model.save} updates the record (rather
+   * than creating a new one) and publishes the saved values only once the server accepts them.
+   *
+   * @returns {this} an untracked copy with the same attributes and loaded relations
+   */
+  clone(): this {
+    const modelConstructor = this.constructor as ModelConstructor
+    const copy = new modelConstructor({ ...this }) as this
+    if (persistedInstances.has(this)) {
+      persistedInstances.add(copy)
+    }
+    draftInstances.add(copy)
+    return Model.guard(copy)
   }
 
   /**
@@ -280,7 +439,7 @@ export class Model {
     )
     return toModelCollection(
       rows.map((row) => related.instantiate(row)),
-      Model.readTotalCount(headers, rows.length)
+      readTotalCount(headers, rows.length)
     )
   }
 

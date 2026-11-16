@@ -8,8 +8,10 @@ use Vifrost\Laravel\Commands\MakeAPICommand;
 use Vifrost\Laravel\Commands\MakeControllerCommand;
 use Vifrost\Laravel\Commands\MakeRequestCommand;
 use Vifrost\Laravel\Commands\SchemaCommand;
+use Vifrost\Laravel\Dataset\DatasetTimeout;
 use Vifrost\Laravel\SchemaExporter;
 use Vifrost\Laravel\Vifrost;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
@@ -55,6 +57,8 @@ class VifrostServiceProvider extends ServiceProvider
         if (config('vifrost.sync_route.enabled')) {
             Vifrost::syncRoute();
         }
+
+        $this->callAfterResolving(ExceptionHandler::class, fn ($handler) => DatasetTimeout::registerOn($handler));
 
         $srcPath = $this->getSrcPath();
         $this->publishes([

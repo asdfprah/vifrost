@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import { Command } from 'commander'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import path from 'node:path'
+import { readFile } from 'node:fs/promises'
 import { generateSchema } from './generate.js'
 import { loadSchema } from './schema.js'
+import { writeGeneratedFiles } from './write.js'
 
 const program = new Command()
 
@@ -34,10 +34,9 @@ const files = generateSchema(schema, {
   onWarning: (message) => console.warn(message),
 })
 
-await mkdir(options.output, { recursive: true })
+const { written, removed } = await writeGeneratedFiles(options.output, files)
 
-for (const file of files) {
-  await writeFile(path.join(options.output, file.fileName), file.content, 'utf-8')
+console.log(`Generated ${written.length} file(s) in ${options.output}`)
+if (removed.length > 0) {
+  console.log(`Removed ${removed.length} file(s) no longer in the schema: ${removed.join(', ')}`)
 }
-
-console.log(`Generated ${files.length} file(s) in ${options.output}`)

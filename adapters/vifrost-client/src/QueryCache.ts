@@ -1,10 +1,11 @@
 import { HttpError } from './HttpError.js'
 import type { Model } from './Model.js'
+import { PendingResources } from './PendingResources.js'
 import type { QueryBuilder } from './QueryBuilder.js'
 import { QueryEntry } from './QueryEntry.js'
-import type { QueryCacheOptions, QueryHandle, SyncResult } from './types.js'
+import type { QueryCacheOptions, QueryHandle, QuerySnapshot, SyncResult } from './types.js'
+import { WatchedEntries } from './WatchedEntries.js'
 
-const DEFAULT_DEBOUNCE_MS = 50
 const DEFAULT_MAX_QUERIES = 20
 
 /**
@@ -19,9 +20,8 @@ const DEFAULT_MAX_QUERIES = 20
  * nobody watches is dropped, so it is fetched fresh when watched again.
  */
 export class QueryCache {
-  private readonly entries = new Map<string, QueryEntry<Model>>()
-  private pendingResources = new Set<string>()
-  private timer: ReturnType<typeof setTimeout> | null = null
+  private readonly entries = new WatchedEntries<QuerySnapshot<Model>, QueryEntry<Model>>()
+  private readonly pending: PendingResources
   private syncUnavailable = false
   private readonly stopListening: () => void
 
@@ -29,6 +29,7 @@ export class QueryCache {
    * @param {QueryCacheOptions} options
    */
   constructor(private readonly options: QueryCacheOptions) {
+    this.pending = new PendingResources((resources) => this.refreshResources(resources), options.sync.debounceMs)
     const unsubscribe = options.registry?.subscribeResources((resourceType) => this.schedule(resourceType))
     this.stopListening = unsubscribe ?? (() => undefined)
   }
@@ -41,35 +42,10 @@ export class QueryCache {
    */
   watch<T extends Model>(builder: QueryBuilder<T>): QueryHandle<T> {
     const key = builder.toPath()
-    let entry = this.entries.get(key) as QueryEntry<T> | undefined
-    const isNew = entry === undefined
-    if (!entry) {
-      entry = new QueryEntry<T>(key, builder, this.options.registry)
-      this.entries.set(key, entry as unknown as QueryEntry<Model>)
-    }
-    entry.watchers++
-    if (isNew) {
-      void entry.refetch()
-    }
-
-    const watched = entry
-    let released = false
-    return {
-      snapshot: () => watched.snapshot(),
-      subscribe: (listener) => watched.subscribe(listener),
-      refetch: () => watched.refetch(),
-      release: () => {
-        if (released) {
-          return
-        }
-        released = true
-        watched.watchers--
-        if (watched.watchers === 0 && this.entries.get(key) === (watched as unknown as QueryEntry<Model>)) {
-          watched.dispose()
-          this.entries.delete(key)
-        }
-      },
-    }
+    return this.entries.watch(
+      key,
+      () => new QueryEntry<T>(key, builder, this.options.registry) as unknown as QueryEntry<Model>
+    ) as unknown as QueryHandle<T>
   }
 
   /**
@@ -79,14 +55,7 @@ export class QueryCache {
    * @returns {void}
    */
   schedule(resource: string): void {
-    this.pendingResources.add(resource)
-    if (this.timer !== null) {
-      return
-    }
-    this.timer = setTimeout(() => {
-      this.timer = null
-      void this.flush()
-    }, this.options.sync.debounceMs ?? DEFAULT_DEBOUNCE_MS)
+    this.pending.add(resource)
   }
 
   /**
@@ -94,16 +63,8 @@ export class QueryCache {
    *
    * @returns {Promise<void>}
    */
-  async flush(): Promise<void> {
-    if (this.timer !== null) {
-      clearTimeout(this.timer)
-      this.timer = null
-    }
-    const resources = this.pendingResources
-    this.pendingResources = new Set()
-
-    const lists = [...this.entries.values()].filter((entry) => entry.isCollection && resources.has(entry.resource))
-    await this.refresh(lists)
+  flush(): Promise<void> {
+    return this.pending.flush()
   }
 
   /**
@@ -112,15 +73,20 @@ export class QueryCache {
    * @returns {void}
    */
   dispose(): void {
-    if (this.timer !== null) {
-      clearTimeout(this.timer)
-      this.timer = null
-    }
-    for (const entry of this.entries.values()) {
-      entry.dispose()
-    }
-    this.entries.clear()
+    this.pending.dispose()
+    this.entries.dispose()
     this.stopListening()
+  }
+
+  /**
+   * Refreshes the watched lists of the resources whose records changed.
+   *
+   * @param {Set<string>} resources
+   * @returns {Promise<void>}
+   */
+  private async refreshResources(resources: Set<string>): Promise<void> {
+    const lists = this.entries.values().filter((entry) => entry.isCollection && resources.has(entry.resource))
+    await this.refresh(lists)
   }
 
   /**

@@ -1,9 +1,12 @@
 <?php
 
+use Vifrost\Laravel\Dataset\InvalidDatasetQuery;
 use Vifrost\Laravel\Vifrost;
 use Vifrost\Laravel\Tests\Fixtures\Category;
 use Vifrost\Laravel\Tests\Fixtures\Product;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Spatie\QueryBuilder\QueryBuilder;
@@ -171,4 +174,37 @@ it('unlike getCountForPagination(), a plain ->count() silently returns 0 once ?o
     // ?offset= beyond 0 skips that row entirely — this returns 0, not the total, not
     // even the page size.
     expect($queryBuilder->count())->toBe(0);
+});
+
+it('authorizes viewAny in query() once the model has a policy', function () {
+    generatedProductControllerClass();
+    Gate::policy('App\Models\Product', DenyProductListing::class);
+
+    expect(fn () => controllerIndexFor('api/product'))->toThrow(AuthorizationException::class);
+});
+
+it('lists without authorizing while the model has no policy', function () {
+    [$rows] = controllerIndexFor('api/product');
+
+    expect($rows)->toHaveCount(5);
+});
+
+/**
+ * Denies listing products to everyone, standing in for an app policy.
+ */
+class DenyProductListing
+{
+    /**
+     * @param mixed $user
+     * @return bool
+     */
+    public function viewAny($user = null): bool
+    {
+        return false;
+    }
+}
+
+it('generates controllers with datasets disabled until their rules allow some', function () {
+    expect(fn () => controllerIndexFor('api/product', ['select' => 'name', 'limit' => 10]))
+        ->toThrow(InvalidDatasetQuery::class, 'Datasets are not enabled for Product.');
 });

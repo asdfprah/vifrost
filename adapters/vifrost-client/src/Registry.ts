@@ -8,6 +8,34 @@ import type {
 } from './types.js'
 
 /**
+ * Copies onto a record's fresh value the own attributes of its previous value that the fresh
+ * one does not have, such as relations loaded by another query or sent by the server only on
+ * a fetch with includes.
+ *
+ * @param {unknown} previous the value tracked so far
+ * @param {unknown} fresh the value replacing it
+ * @returns {void}
+ */
+function keepMissingAttributes(previous: unknown, fresh: unknown): void {
+  if (previous === fresh || !isRecord(previous) || !isRecord(fresh)) {
+    return
+  }
+  for (const key of Object.keys(previous)) {
+    if (!Object.prototype.hasOwnProperty.call(fresh, key)) {
+      fresh[key] = previous[key]
+    }
+  }
+}
+
+/**
+ * @param {unknown} value
+ * @returns {boolean} whether the value is an object whose attributes can be copied
+ */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+/**
  * Identity map keyed by `${resourceType}:${id}`, tracking every {@link Model}
  * instance a `find`/`all`/`query`/relation call has fetched.
  *
@@ -44,17 +72,30 @@ export class Registry {
    * in the same identity map as `find`/`all`/`query` without a separate
    * "publish" concept: any code path that hands the registry a fresh value
    * for a tracked record propagates it the same way.
+   *
+   * A value fetched with fewer relations than the tracked one keeps the ones it lacks, and
+   * the entry remembers every relation any fetch of the record loaded, so a later resync
+   * requests them all.
+   *
+   * @param {string} resourceType
+   * @param {string | number} id the record's id as `Model.keyOf()` returns it
+   * @param {T} value the record's fresh value
+   * @param {ResyncFn<T>} resync re-fetches the record with the relations it is given
+   * @param {string[]} includes the relations `value` was fetched with
+   * @returns {void}
    */
-  track<T>(resourceType: string, id: string | number, value: T, resync: ResyncFn<T>): void {
+  track<T>(resourceType: string, id: string | number, value: T, resync: ResyncFn<T>, includes: string[] = []): void {
     const key = this.keyFor(resourceType, id)
     const existingEntry = this.entries.get(key) as RegistryEntry<T> | undefined
     if (existingEntry) {
+      keepMissingAttributes(existingEntry.value, value)
       existingEntry.value = value
       existingEntry.resync = resync
+      includes.forEach((relation) => existingEntry.includes.add(relation))
       this.notify(existingEntry, { type: 'updated', value })
       return
     }
-    this.entries.set(key, { value, resync, listeners: new Set() } as RegistryEntry<unknown>)
+    this.entries.set(key, { value, resync, includes: new Set(includes), listeners: new Set() } as RegistryEntry<unknown>)
   }
 
   /**
@@ -137,7 +178,8 @@ export class Registry {
     if (!entry) {
       return
     }
-    const value = await entry.resync()
+    const value = await entry.resync([...entry.includes])
+    keepMissingAttributes(entry.value, value)
     entry.value = value
     this.notify(entry, { type: 'updated', value })
     this.publish(resourceType, { type: 'updated', id })

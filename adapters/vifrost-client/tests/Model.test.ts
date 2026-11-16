@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { configure, resetClient } from '../src/config.js'
 import { Model } from '../src/Model.js'
-import type { ModelCollection } from '../src/ModelCollection.js'
+import type { ModelCollection } from '../src/types.js'
 import { Registry } from '../src/Registry.js'
 
 class Category extends Model {

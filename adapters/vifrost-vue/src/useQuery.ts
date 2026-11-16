@@ -1,8 +1,9 @@
 import { getQueryCache } from '@vifrost/client'
-import type { Model, QueryBuilder, QueryHandle, QuerySnapshot } from '@vifrost/client'
-import { onScopeDispose, ref, toValue, watchEffect } from 'vue'
+import type { Model, QueryBuilder } from '@vifrost/client'
+import { ref, toValue } from 'vue'
 import type { MaybeRefOrGetter, Ref } from 'vue'
 import type { QueryResource } from './types.js'
+import { useWatched } from './useWatched.js'
 
 /**
  * Reactive wrapper around a {@link QueryBuilder}'s `get()`, backed by the
@@ -26,53 +27,5 @@ import type { QueryResource } from './types.js'
  * @returns {QueryResource<T>}
  */
 export function useQuery<T extends Model>(source: MaybeRefOrGetter<QueryBuilder<T>>): QueryResource<T> {
-  const data = ref<T[]>([]) as Ref<T[]>
-  const error = ref<unknown>(null)
-  const isLoading = ref(false)
-  const total = ref(0)
-
-  let handle: QueryHandle<T> | null = null
-  let unsubscribe: (() => void) | null = null
-
-  /**
-   * @param {QuerySnapshot<T>} snapshot
-   * @returns {void}
-   */
-  function apply(snapshot: QuerySnapshot<T>): void {
-    data.value = snapshot.rows
-    error.value = snapshot.error
-    isLoading.value = snapshot.isLoading
-    total.value = snapshot.total
-  }
-
-  /**
-   * Stops watching the current query.
-   *
-   * @returns {void}
-   */
-  function stop(): void {
-    unsubscribe?.()
-    handle?.release()
-    unsubscribe = null
-    handle = null
-  }
-
-  watchEffect(() => {
-    const next = getQueryCache().watch(toValue(source))
-    stop()
-    handle = next
-    unsubscribe = next.subscribe(apply)
-    apply(next.snapshot())
-  })
-
-  onScopeDispose(stop)
-
-  /**
-   * @returns {Promise<void>}
-   */
-  function refetch(): Promise<void> {
-    return handle ? handle.refetch() : Promise.resolve()
-  }
-
-  return { data, error, isLoading, refetch, total }
+  return useWatched(() => getQueryCache().watch(toValue(source)), ref<T[]>([]) as Ref<T[]>)
 }

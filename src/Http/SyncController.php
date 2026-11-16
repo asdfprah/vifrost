@@ -2,12 +2,14 @@
 
 namespace Vifrost\Laravel\Http;
 
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
+use Vifrost\Laravel\Dataset\Dataset;
 use Vifrost\Laravel\Describer;
 use Vifrost\Laravel\Pagination;
 use Vifrost\Laravel\Vifrost;
@@ -46,8 +48,8 @@ class SyncController
     }
 
     /**
-     * Refreshes one query, turning an HTTP error it raises into its status instead of
-     * failing the whole batch
+     * Refreshes one query, turning an HTTP or authorization error it raises into its
+     * status instead of failing the whole batch
      *
      * @param string $path query path relative to the API root, with its query string
      * @param array $known normalized keys of the rows the client already has
@@ -61,6 +63,8 @@ class SyncController
             return $this->run($queryRequest, $known);
         } catch (HttpExceptionInterface $exception) {
             return ['status' => $exception->getStatusCode()];
+        } catch (AuthorizationException $exception) {
+            return ['status' => $exception->status() ?? 403];
         } catch (ModelNotFoundException) {
             return ['status' => 404];
         }
@@ -68,7 +72,7 @@ class SyncController
 
     /**
      * Runs a collection query through its controller's query() method and paginates it
-     * like index() does
+     * like index() does. A dataset is not a list of records, so it is rejected with 400
      *
      * @param \Illuminate\Http\Request $queryRequest request built from the query path
      * @param array $known normalized keys of the rows the client already has
@@ -77,16 +81,19 @@ class SyncController
     private function run(Request $queryRequest, array $known): array
     {
         $vifrost = new Vifrost;
-        $sections = $vifrost->getRequestPath($queryRequest);
 
-        if (! in_array(count($sections), [1, 3]) || is_null($vifrost->findModel($sections[0]))) {
+        if (! $vifrost->isCollectionPath($queryRequest) || is_null($vifrost->findModel($vifrost->getRequestPath($queryRequest)[0]))) {
             return ['status' => 404];
         }
 
-        $modelClass = $this->servedModel($vifrost->getQuery($queryRequest));
-        $controllerClass = Vifrost::controllerFor($modelClass);
+        if (Dataset::isRequested($queryRequest)) {
+            return ['status' => 400];
+        }
 
-        if (! class_exists($controllerClass) || ! method_exists($controllerClass, 'query')) {
+        $modelClass = $this->servedModel($vifrost->getQuery($queryRequest));
+        $controllerClass = Vifrost::queryControllerFor($modelClass);
+
+        if (is_null($controllerClass)) {
             return ['status' => 501];
         }
 
