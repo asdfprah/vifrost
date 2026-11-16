@@ -1,5 +1,6 @@
 <?php
 
+use Vifrost\Laravel\Dataset\InvalidDatasetQuery;
 use Vifrost\Laravel\Vifrost;
 use Vifrost\Laravel\Tests\Fixtures\Category;
 use Vifrost\Laravel\Tests\Fixtures\Product;
@@ -203,3 +204,7 @@ class DenyProductListing
     }
 }
 
+it('generates controllers with datasets disabled until their rules allow some', function () {
+    expect(fn () => controllerIndexFor('api/product', ['select' => 'name', 'limit' => 10]))
+        ->toThrow(InvalidDatasetQuery::class, 'Datasets are not enabled for Product.');
+});

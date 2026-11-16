@@ -37,6 +37,26 @@ return [
         // \App\Models\Category::class => null,
     ],
 
+    // Datasets: rows of selected columns, joins and aggregates requested through a model's
+    // index route. Each part is enabled per controller with the allowedColumns/Joins/Has/
+    // Aggregates methods of its query(); these options only bound what an enabled one can do.
+    'dataset' => [
+        // Max rows per request. A dataset always requires ?limit=; exceeding it is a 422.
+        'max_limit' => 1000,
+        // Per-model overrides, keyed by model FQCN. Unlike max_limit_per_model, null does not exempt.
+        'max_limit_per_model' => [
+            // \App\Models\Order::class => 5000,
+        ],
+        // Milliseconds each query of a dataset may run before the database cancels it (504).
+        // Applied on PostgreSQL, MySQL and MariaDB; ignored on other drivers. null disables it.
+        'timeout_ms' => 5000,
+        'timeout_ms_per_model' => [
+            // \App\Models\Order::class => 15000,
+        ],
+        // Max nesting of whereHas/whereDoesntHave, counting the first level. Deeper is a 400.
+        'max_has_depth' => 3,
+    ],
+
     'relations'   => [
         'hasMany',
         'hasOne',

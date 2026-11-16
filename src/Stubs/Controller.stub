@@ -8,8 +8,8 @@ use App\Http\Requests\UpdateDummyCode:modelRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
-use Spatie\QueryBuilder\QueryBuilder;
 use Vifrost\Laravel\Pagination;
+use Vifrost\Laravel\QueryBuilder;
 use Vifrost\Laravel\Vifrost;
 
 /**
@@ -42,6 +42,48 @@ class DummyCode:modelController extends Controller
     }
 
     /**
+     * Columns a dataset of DummyCode:model may select, filter, group or aggregate, dotted for the
+     * columns of a joined or has relation (e.g. 'category.name'). A dataset is a request to index()
+     * with ?select= or ?aggregate=; while this and allowedAggregates() are empty, there is none.
+     *
+     * @return array
+     */
+    private function allowedColumns(): array
+    {
+        return [];
+    }
+
+    /**
+     * BelongsTo, HasOne, HasMany and BelongsToMany relations a dataset of DummyCode:model may join.
+     *
+     * @return array
+     */
+    private function allowedJoins(): array
+    {
+        return [];
+    }
+
+    /**
+     * Relations a dataset of DummyCode:model may filter by with whereHas, dotted for nested ones.
+     *
+     * @return array
+     */
+    private function allowedHas(): array
+    {
+        return [];
+    }
+
+    /**
+     * Aggregates a dataset of DummyCode:model may compute: count, sum, avg, min, max.
+     *
+     * @return array
+     */
+    private function allowedAggregates(): array
+    {
+        return [];
+    }
+
+    /**
      * Builds the query index() and show() run for a request. Vifrost's sync endpoint
      * also calls it, with a request built from a client's query string, to refresh the
      * lists a client shows when records change. Customize the query here rather than
@@ -50,7 +92,7 @@ class DummyCode:modelController extends Controller
      * once DummyCode:model has a policy, its viewAny ability guards every list.
      *
      * @param  \Illuminate\Http\Request  $request
-     * @return \Spatie\QueryBuilder\QueryBuilder
+     * @return \Vifrost\Laravel\QueryBuilder
      */
     public function query(Request $request): QueryBuilder
     {
@@ -61,7 +103,11 @@ class DummyCode:modelController extends Controller
         return QueryBuilder::for( (new Vifrost)->getQuery($request), $request )
             ->allowedFilters($this->allowedFilters())
             ->allowedIncludes($this->allowedIncludes())
-            ->allowedSorts(['id', 'created_at', 'updated_at']);
+            ->allowedSorts(['id', 'created_at', 'updated_at'])
+            ->allowedColumns($this->allowedColumns())
+            ->allowedJoins($this->allowedJoins())
+            ->allowedHas($this->allowedHas())
+            ->allowedAggregates($this->allowedAggregates());
     }
 
     /**

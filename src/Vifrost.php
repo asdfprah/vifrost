@@ -277,6 +277,32 @@ class Vifrost
     }
 
     /**
+     * Whether a request reads a collection: a model's index ({model}) or a relation of one of
+     * its records ({model}/{id}/{relation}), rather than a single record
+     *
+     * @param \Illuminate\Http\Request|null $request defaults to the current request
+     * @return bool
+     */
+    public function isCollectionPath(?Request $request = null): bool
+    {
+        return in_array(count($this->getRequestPath($request)), [1, 3], true);
+    }
+
+    /**
+     * The controller that builds a model's query in query(), as Controller.stub generates it,
+     * or null when the model has no such controller
+     *
+     * @param string $modelClass model full classname
+     * @return string|null
+     */
+    public static function queryControllerFor(string $modelClass): ?string
+    {
+        $controllerClass = self::controllerFor($modelClass);
+
+        return class_exists($controllerClass) && method_exists($controllerClass, 'query') ? $controllerClass : null;
+    }
+
+    /**
      * Class name of the controller vifrost:api generates for a model
      *
      * @param string $modelClass model full classname

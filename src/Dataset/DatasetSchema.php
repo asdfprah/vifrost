@@ -1,0 +1,152 @@
+<?php
+
+namespace Vifrost\Laravel\Dataset;
+
+use Illuminate\Database\Eloquent\Model;
+use ReflectionMethod;
+use Vifrost\Laravel\Describer;
+use Vifrost\Laravel\Vifrost;
+
+/**
+ * Describes what the datasets of a model allow, for the schema export, so the client can type
+ * them. The rules are read from the private allowedColumns(), allowedJoins(), allowedHas() and
+ * allowedAggregates() methods of the model's controller, without running its query().
+ */
+class DatasetSchema
+{
+    /**
+     * Rule methods of a generated controller, by the rule they hold.
+     *
+     * @var array
+     */
+    private const METHODS = [
+        'columns' => 'allowedColumns',
+        'joins' => 'allowedJoins',
+        'has' => 'allowedHas',
+        'aggregates' => 'allowedAggregates',
+    ];
+
+    /**
+     * The dataset description of a model, or null when its controller allows no dataset.
+     *
+     * @param string $modelClass model full classname
+     * @return array|null
+     */
+    public static function for(string $modelClass): ?array
+    {
+        $rules = self::rulesFor(ltrim($modelClass, '\\'));
+
+        if (is_null($rules) || ! $rules->isEnabled()) {
+            return null;
+        }
+
+        $model = new $modelClass;
+        $rules->validate($model);
+
+        $joins = [];
+        foreach ($rules->joins as $join) {
+            $relation = DatasetRules::relation($model, $join);
+            $joins[$join] = [
+                'model' => get_class($relation->getRelated()),
+                'type' => class_basename($relation),
+                'columns' => self::columnsAt($relation->getRelated(), $rules->columns, $join),
+            ];
+        }
+
+        return [
+            'maxLimit' => DatasetLimits::maxLimitFor($modelClass),
+            'columns' => self::columnsAt($model, $rules->columns, ''),
+            'joins' => $joins,
+            'has' => self::hasTree($model, $rules, ''),
+            'aggregates' => array_values($rules->aggregates),
+        ];
+    }
+
+    /**
+     * The rules a model's controller declares, or null when it declares none.
+     *
+     * @param string $modelClass
+     * @return \Vifrost\Laravel\Dataset\DatasetRules|null
+     */
+    private static function rulesFor(string $modelClass): ?DatasetRules
+    {
+        $controllerClass = Vifrost::queryControllerFor($modelClass);
+
+        if (is_null($controllerClass) || ! method_exists($controllerClass, self::METHODS['columns'])) {
+            return null;
+        }
+
+        $controller = app($controllerClass);
+        $rules = new DatasetRules;
+
+        foreach (self::METHODS as $rule => $method) {
+            if (method_exists($controller, $method)) {
+                $rules->{$rule} = array_values((new ReflectionMethod($controller, $method))->invoke($controller));
+            }
+        }
+
+        return $rules;
+    }
+
+    /**
+     * The has levels below a relation path, each with its model, its allowed columns and the
+     * levels below it.
+     *
+     * @param \Illuminate\Database\Eloquent\Model $model the model at this level
+     * @param \Vifrost\Laravel\Dataset\DatasetRules $rules
+     * @param string $prefix dotted relation path of this level, empty at the root
+     * @return array
+     */
+    private static function hasTree(Model $model, DatasetRules $rules, string $prefix): array
+    {
+        $tree = [];
+        $depth = $prefix === '' ? 1 : substr_count($prefix, '.') + 2;
+
+        foreach ($rules->has as $path) {
+            if (substr_count($path, '.') + 1 !== $depth || ($prefix !== '' && ! str_starts_with($path, $prefix . '.'))) {
+                continue;
+            }
+
+            $name = $prefix === '' ? $path : substr($path, strlen($prefix) + 1);
+            $related = DatasetRules::relation($model, $name)->getRelated();
+            $tree[$name] = [
+                'model' => get_class($related),
+                'columns' => self::columnsAt($related, $rules->columns, $path),
+                'has' => self::hasTree($related, $rules, $path),
+            ];
+        }
+
+        return $tree;
+    }
+
+    /**
+     * The allowed columns directly under a relation path, with the type the schema reports
+     * for them.
+     *
+     * @param \Illuminate\Database\Eloquent\Model $model the model the columns belong to
+     * @param array $columns every allowed column path
+     * @param string $prefix dotted relation path, empty for the root model
+     * @return array
+     */
+    private static function columnsAt(Model $model, array $columns, string $prefix): array
+    {
+        $description = Describer::describe($model);
+        $result = [];
+
+        foreach ($columns as $path) {
+            $column = $prefix === '' ? $path : (str_starts_with($path, $prefix . '.') ? substr($path, strlen($prefix) + 1) : null);
+
+            if (is_null($column) || str_contains($column, '.') || ! isset($description[$column])) {
+                continue;
+            }
+
+            $result[$column] = [
+                'type' => $description[$column]['type'],
+                'rawType' => $description[$column]['rawType'],
+                'isNullable' => $description[$column]['isNullable'],
+            ];
+        }
+
+        return $result;
+    }
+}

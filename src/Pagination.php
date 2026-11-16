@@ -3,6 +3,7 @@
 namespace Vifrost\Laravel;
 
 use Illuminate\Http\Request;
+use Vifrost\Laravel\Contracts\PaginatesItself;
 
 class Pagination{
 
@@ -59,7 +60,8 @@ class Pagination{
 
     /**
      * Applies the resolved limit and offset to a collection query. Aborts with 422 when
-     * ?offset= is given without ?limit= for a model exempt from pagination.
+     * ?offset= is given without ?limit= for a model exempt from pagination. A query that
+     * paginates itself (see PaginatesItself) follows its own rules instead.
      *
      * @param \Spatie\QueryBuilder\QueryBuilder|\Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Eloquent\Relations\Relation $query
      * @param string $modelClass model full classname
@@ -68,6 +70,10 @@ class Pagination{
      */
     public static function apply($query, string $modelClass, ?Request $request = null): void{
         $request = $request ?? request();
+
+        if( $query instanceof PaginatesItself && $query->applyOwnPagination($modelClass, $request) ){
+            return;
+        }
         $limit = self::resolveLimit($modelClass, $request);
 
         if( is_null($limit) && $request->has('offset') ){

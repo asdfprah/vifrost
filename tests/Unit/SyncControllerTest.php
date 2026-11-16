@@ -135,6 +135,15 @@ it('rejects paths that are not a collection query or name no exposed model', fun
     expect(syncQueries([['path' => $path, 'known' => []]])->json('results.0.status'))->toBe(404);
 })->with(['ticket/1', 'board/1/tickets/1', 'nothing']);
 
+it('rejects a dataset in its own entry, since its rows are not records', function () {
+    $results = syncQueries([
+        ['path' => 'ticket?select=status&limit=10', 'known' => []],
+        ['path' => 'ticket?limit=10', 'known' => []],
+    ])->assertOk()->json('results');
+
+    expect(array_column($results, 'status'))->toBe([400, 200]);
+});
+
 it('reports 501 for a controller without query(), so the client refetches instead', function () {
     expect(syncQueries([['path' => 'board?limit=10', 'known' => []]])->json('results.0.status'))->toBe(501);
 });

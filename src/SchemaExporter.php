@@ -2,6 +2,8 @@
 
 namespace Vifrost\Laravel;
 
+use Vifrost\Laravel\Dataset\DatasetSchema;
+
 class SchemaExporter{
 
     /**
@@ -46,6 +48,11 @@ class SchemaExporter{
                 'attributes' => self::attributesFor($instance),
                 'relations' => self::relationsFor($relationshipMap[$model] ?? []),
             ];
+
+            $dataset = DatasetSchema::for($model);
+            if (! is_null($dataset)) {
+                $schema[ltrim($model, '\\')]['dataset'] = $dataset;
+            }
         }
 
         return [
