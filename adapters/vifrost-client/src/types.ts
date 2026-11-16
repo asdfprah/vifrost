@@ -1,5 +1,6 @@
 import type { HttpClient } from './HttpClient.js'
 import type { Model } from './Model.js'
+import type { DatasetBuilder } from './Dataset.js'
 import type { QueryBuilder } from './QueryBuilder.js'
 import type { Registry } from './Registry.js'
 
@@ -161,6 +162,27 @@ export interface QuerySnapshot<T> {
 
 export type QueryListener<T> = (snapshot: QuerySnapshot<T>) => void
 
+/** The current state of a dataset held by {@link DatasetCache}. */
+export interface DatasetSnapshot<Row> {
+  rows: ReadonlyArray<Readonly<Row>>
+  total: number
+  error: unknown
+  isLoading: boolean
+}
+
+export type DatasetListener<Row> = (snapshot: DatasetSnapshot<Row>) => void
+
+/** What {@link DatasetCache.watch} returns: a live view of one dataset, released when no longer needed. */
+export type DatasetHandle<Row> = WatchHandle<DatasetSnapshot<Row>>
+
+/** What a {@link DatasetCache} works with. */
+export interface DatasetCacheOptions {
+  /** Requests datasets again when records change; without it, datasets only refresh on demand. */
+  registry: Registry | null
+  /** @defaultValue `50` — milliseconds to wait for more record events before requesting again. */
+  debounceMs?: number
+}
+
 /** A live view of one watched query or dataset, released when no longer needed. */
 export interface WatchHandle<S> {
   snapshot(): S
@@ -207,3 +229,113 @@ export interface SyncResult {
  * side), independent of how many rows this particular page actually returned.
  */
 export type ModelCollection<T> = T[] & { total: number }
+
+/** Aggregate functions a dataset can compute, when the model's controller allows them. */
+export type DatasetAggregate = 'count' | 'sum' | 'avg' | 'min' | 'max'
+
+/** A value a dataset condition compares a column to. */
+export type DatasetValue = string | number | boolean
+
+/** Comparison operators of a dataset condition. */
+export type DatasetComparison = '=' | '!=' | '<' | '<=' | '>' | '>='
+
+/** Periods {@link DatasetBuilder.groupByDate} can group a date column by. */
+export type DatasetDateUnit = 'day' | 'week' | 'month' | 'year'
+
+/** How a whereHas compares the number of related records. */
+export type DatasetCountOperator = '>=' | '<=' | '>' | '<' | '=' | '!='
+
+/** The columns, and the has levels below them, of a relation a dataset filters by. */
+export interface DatasetHasShape {
+  columns: Record<string, unknown>
+  has: Record<string, DatasetHasShape>
+}
+
+/**
+ * What the datasets of a model allow, as `@vifrost/codegen` emits it from the schema: the
+ * model's columns with their types, the relations it may join with theirs, the has levels it
+ * may filter by and the aggregates it may compute.
+ */
+export interface DatasetShape extends DatasetHasShape {
+  joins: Record<string, { columns: Record<string, unknown> }>
+  aggregates: DatasetAggregate
+}
+
+/** The has levels of a dataset whose shape is not known. */
+export interface AnyDatasetHasShape extends DatasetHasShape {
+  columns: Record<string, unknown>
+  has: Record<string, AnyDatasetHasShape>
+}
+
+/** The shape of a dataset whose model was not generated, which accepts any name. */
+export interface AnyDatasetShape extends DatasetShape {
+  columns: Record<string, unknown>
+  joins: Record<string, { columns: Record<string, unknown> }>
+  has: Record<string, AnyDatasetHasShape>
+  aggregates: DatasetAggregate
+}
+
+/** A model class `@vifrost/codegen` generated with datasets enabled. */
+export interface DatasetModel<S extends DatasetShape = DatasetShape> {
+  resource: string
+  datasetShape: S
+  datasetMaxLimit?: number
+  datasetResources?: Record<string, string>
+}
+
+/** The rows a dataset returned, with the total number of rows it has across pages. */
+export type DatasetRows<Row> = ReadonlyArray<Readonly<Row>> & { readonly total: number }
+
+/** Flattens an intersection of row shapes into one object type. */
+export type DatasetSimplify<T> = { [K in keyof T]: T[K] } & {}
+
+/** Columns of the root model. */
+export type DatasetRootField<S extends DatasetShape> = keyof S['columns'] & string
+
+/** Columns of the joined relations, dotted with their relation name. */
+export type DatasetJoinedField<S extends DatasetShape, J extends string> = J extends keyof S['joins'] & string
+  ? `${J}.${keyof S['joins'][J]['columns'] & string}`
+  : never
+
+/** Any column a dataset with these joins can use. */
+export type DatasetField<S extends DatasetShape, J extends string> = DatasetRootField<S> | DatasetJoinedField<S, J>
+
+/** The type of a column's values; nullable for a left-joined relation. */
+export type DatasetFieldType<S extends DatasetShape, J extends string, L extends string, F extends string> = F extends `${infer R}.${infer C}`
+  ? R extends J
+    ? R extends L
+      ? S['joins'][R]['columns'][C] | null
+      : S['joins'][R]['columns'][C]
+    : F extends keyof S['columns']
+      ? S['columns'][F]
+      : never
+  : F extends keyof S['columns']
+    ? S['columns'][F]
+    : never
+
+/** What min and max return: numbers for a numeric column, otherwise the value or a number. */
+export type DatasetExtreme<T> = [T] extends [number | null] ? number | null : Exclude<T, null> | number | null
+
+/** The builder itself when its shape allows an aggregate function, so calling it otherwise fails to compile. */
+export type DatasetAllowing<S extends DatasetShape, J extends string, L extends string, Row extends object, F extends DatasetAggregate> =
+  F extends S['aggregates'] ? DatasetBuilder<S, J, L, Row> : never
+
+/** One serialized condition of `where` or of a has level. */
+export type DatasetCondition =
+  | { column: string; op: string; value?: DatasetValue | DatasetValue[] }
+  | { or: DatasetCondition[] }
+  | { and: DatasetCondition[] }
+
+/** One serialized has level. */
+export interface DatasetHasLevel {
+  where: DatasetCondition[]
+  has: Record<string, DatasetHasLevel>
+  op: DatasetCountOperator
+  count: number
+  negate: boolean
+}
+
+/** Options of {@link DatasetBuilder.get}. */
+export interface DatasetRequestOptions {
+  signal?: AbortSignal
+}

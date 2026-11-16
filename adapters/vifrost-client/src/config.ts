@@ -1,4 +1,5 @@
 import { HttpClient } from './HttpClient.js'
+import { DatasetCache } from './DatasetCache.js'
 import { QueryCache } from './QueryCache.js'
 import type { ConfigureOptions, SyncOptions, UnloadedRelationAccess } from './types.js'
 import type { Registry } from './Registry.js'
@@ -8,6 +9,7 @@ let sharedRegistry: Registry | null = null
 let sharedUnloadedRelationAccess: UnloadedRelationAccess = 'warn'
 let sharedSyncOptions: SyncOptions = {}
 let sharedQueryCache: QueryCache | null = null
+let sharedDatasetCache: DatasetCache | null = null
 
 /** Call once, before any {@link Model} method is used. */
 export function configure(options: ConfigureOptions): void {
@@ -17,6 +19,8 @@ export function configure(options: ConfigureOptions): void {
   sharedSyncOptions = options.sync ?? {}
   sharedQueryCache?.dispose()
   sharedQueryCache = null
+  sharedDatasetCache?.dispose()
+  sharedDatasetCache = null
 }
 
 /** @throws if {@link configure} hasn't been called yet */
@@ -60,6 +64,16 @@ export function getQueryCache(): QueryCache {
   return sharedQueryCache
 }
 
+/**
+ * The {@link DatasetCache} shared by every reactive dataset of this client, created on first use.
+ *
+ * @returns {DatasetCache}
+ */
+export function getDatasetCache(): DatasetCache {
+  sharedDatasetCache ??= new DatasetCache({ registry: sharedRegistry, debounceMs: sharedSyncOptions.debounceMs })
+  return sharedDatasetCache
+}
+
 /** Test-only: clears the configured client/registry so each test starts clean. */
 export function resetClient(): void {
   sharedHttpClient = null
@@ -68,4 +82,6 @@ export function resetClient(): void {
   sharedSyncOptions = {}
   sharedQueryCache?.dispose()
   sharedQueryCache = null
+  sharedDatasetCache?.dispose()
+  sharedDatasetCache = null
 }

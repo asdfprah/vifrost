@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { configure, getQueryCache, resetClient } from '../src/config.js'
+import { Dataset } from '../src/Dataset.js'
 import { Model } from '../src/Model.js'
 import { Registry } from '../src/Registry.js'
 
@@ -91,4 +92,9 @@ describe('Model.related()', () => {
     expect(JSON.parse(fetchMock.mock.calls[1][1].body).queries[0].path).toBe('customer/5/orders?limit=10')
   })
 
+  it('starts a dataset of the relation', () => {
+    const path = Dataset.for(Customer.related(5, 'orders', Order)).count('total').limit(1).toPath()
+
+    expect(path).toBe('customer/5/orders?aggregate%5Btotal%5D=count&limit=1')
+  })
 })
