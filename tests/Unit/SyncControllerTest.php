@@ -6,6 +6,7 @@ use Vifrost\Laravel\Tests\Fixtures\SyncModels\Ticket;
 use Vifrost\Laravel\Vifrost;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -26,6 +27,21 @@ class RequireSyncToken
     {
         abort_unless($request->hasHeader('X-Sync-Token'), 401);
         return $next($request);
+    }
+}
+
+/**
+ * Denies listing tickets to everyone, standing in for an app policy.
+ */
+class DenyTicketListing
+{
+    /**
+     * @param mixed $user
+     * @return bool
+     */
+    public function viewAny($user = null): bool
+    {
+        return false;
     }
 }
 
@@ -102,6 +118,17 @@ it('reports a failing query in its own entry without failing the others', functi
     ])->assertOk()->json('results');
 
     expect(array_column($results, 'status'))->toBe([400, 404, 200]);
+});
+
+it('reports a query its controller does not authorize in its own entry', function () {
+    Gate::policy(Ticket::class, DenyTicketListing::class);
+
+    $results = syncQueries([
+        ['path' => 'ticket?limit=10', 'known' => []],
+        ['path' => 'board?limit=10', 'known' => []],
+    ])->assertOk()->json('results');
+
+    expect(array_column($results, 'status'))->toBe([403, 501]);
 });
 
 it('rejects paths that are not a collection query or name no exposed model', function (string $path) {

@@ -2,6 +2,7 @@
 
 namespace Vifrost\Laravel\Http;
 
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -46,8 +47,8 @@ class SyncController
     }
 
     /**
-     * Refreshes one query, turning an HTTP error it raises into its status instead of
-     * failing the whole batch
+     * Refreshes one query, turning an HTTP or authorization error it raises into its
+     * status instead of failing the whole batch
      *
      * @param string $path query path relative to the API root, with its query string
      * @param array $known normalized keys of the rows the client already has
@@ -61,6 +62,8 @@ class SyncController
             return $this->run($queryRequest, $known);
         } catch (HttpExceptionInterface $exception) {
             return ['status' => $exception->getStatusCode()];
+        } catch (AuthorizationException $exception) {
+            return ['status' => $exception->status() ?? 403];
         } catch (ModelNotFoundException) {
             return ['status' => 404];
         }
