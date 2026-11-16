@@ -106,3 +106,54 @@ describe('one record fetched by queries with different includes', () => {
     expect(resyncUrl).toContain('order/1?include=shippingAddress,courier')
   })
 })
+
+describe('Model#clone()', () => {
+  it('edits a copy without touching the tracked record', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ id: 1, status: 'open' }))
+    const order = await Order.find(1)
+    const listener = vi.fn()
+    registry.subscribe('order', 1, listener)
+
+    const draft = order.clone()
+    draft.status = 'done'
+
+    expect(order.status).toBe('open')
+    expect(listener).not.toHaveBeenCalled()
+  })
+
+  it('saves as an update and publishes the saved values only once the server accepts them', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse([{ id: 1, status: 'open', shipping_address: { id: 7 } }]))
+      .mockResolvedValueOnce(jsonResponse({ id: 1, status: 'done' }))
+    const [order] = await Order.query().with('shippingAddress').limit(1).get()
+    const listener = vi.fn()
+    registry.subscribe('order', 1, listener)
+
+    const draft = order.clone()
+    draft.status = 'done'
+    await draft.save()
+
+    expect(fetchMock.mock.calls[1][0]).toBe('https://api.test/order/1')
+    expect(fetchMock.mock.calls[1][1].method).toBe('PUT')
+    const [event] = listener.mock.calls[0]
+    expect(event.value.status).toBe('done')
+    expect(event.value.shippingAddress).toEqual({ id: 7 })
+    expect(event.value).not.toBe(draft)
+  })
+
+  it('publishes nothing when the server rejects the change', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ id: 1, status: 'open' }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ message: 'invalid' }), { status: 422, headers: { 'content-type': 'application/json' } }))
+    const order = await Order.find(1)
+    const listener = vi.fn()
+    registry.subscribe('order', 1, listener)
+
+    const draft = order.clone()
+    draft.status = 'nope'
+
+    await expect(draft.save()).rejects.toThrow()
+    expect(listener).not.toHaveBeenCalled()
+    expect(order.status).toBe('open')
+  })
+})

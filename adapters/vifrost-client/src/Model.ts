@@ -10,6 +10,8 @@ const NO_INCLUDES: string[] = []
 
 const persistedInstances = new WeakSet<object>()
 
+const draftInstances = new WeakSet<object>()
+
 /**
  * The key Laravel serializes a loaded relation under, with `Model::$snakeAttributes` on.
  *
@@ -232,13 +234,30 @@ export class Model {
       )
     }
 
+    return Model.guard(instance)
+  }
+
+  /**
+   * Wraps a record so reading a relation it did not load as data is reported as the configured
+   * {@link UnloadedRelationAccess} says, keeping what it knows about the record.
+   *
+   * @param {T} instance a record whose own properties are its attributes and loaded relations
+   * @returns {T} the record itself when there is nothing to guard, or a guarding proxy of it
+   */
+  private static guard<T extends Model>(instance: T): T {
+    const modelConstructor = instance.constructor as ModelConstructor
     const mode = getUnloadedRelationAccess()
-    if (mode === 'off' || this.relations.length === 0) {
+    if (mode === 'off' || modelConstructor.relations.length === 0) {
       return instance
     }
-    const unloadedRelationNames = this.relations.filter((name) => !hasOwn(instance, name))
+    const unloadedRelationNames = modelConstructor.relations.filter((name) => !hasOwn(instance, name))
     const guarded = guardUnloadedRelations(instance, unloadedRelationNames, mode)
-    persistedInstances.add(guarded)
+    if (persistedInstances.has(instance)) {
+      persistedInstances.add(guarded)
+    }
+    if (draftInstances.has(instance)) {
+      draftInstances.add(guarded)
+    }
     return guarded
   }
 
@@ -286,6 +305,9 @@ export class Model {
    * the Registry's resource listeners (such as the lists of `QueryCache`),
    * since a created or updated record can enter or leave them.
    *
+   * A copy made with {@link Model.clone} stays apart from the Registry: a copy of it with the
+   * saved values replaces the tracked record, and only once the server accepts the change.
+   *
    * @returns {Promise<this>}
    */
   async save(): Promise<this> {
@@ -303,7 +325,9 @@ export class Model {
     const registry = getRegistry()
     const savedId = modelConstructor.keyOf(this)
     if (registry && savedId !== null) {
-      registry.track(modelConstructor.resource, savedId, this, (relations = NO_INCLUDES) =>
+      const saved = draftInstances.has(this) ? new modelConstructor({ ...this }) : this
+      persistedInstances.add(saved)
+      registry.track(modelConstructor.resource, savedId, saved, (relations = NO_INCLUDES) =>
         modelConstructor
           .query()
           .with(...relations)
@@ -314,6 +338,23 @@ export class Model {
     }
 
     return this
+  }
+
+  /**
+   * A copy of this record to edit apart from the instance every list and `useModel` shows:
+   * changing it changes nothing else, and its {@link Model.save} updates the record (rather
+   * than creating a new one) and publishes the saved values only once the server accepts them.
+   *
+   * @returns {this} an untracked copy with the same attributes and loaded relations
+   */
+  clone(): this {
+    const modelConstructor = this.constructor as ModelConstructor
+    const copy = new modelConstructor({ ...this }) as this
+    if (persistedInstances.has(this)) {
+      persistedInstances.add(copy)
+    }
+    draftInstances.add(copy)
+    return Model.guard(copy)
   }
 
   /**
