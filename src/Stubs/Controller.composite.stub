@@ -7,6 +7,7 @@ use App\Http\Requests\StoreDummyCode:modelRequest;
 use App\Http\Requests\UpdateDummyCode:modelRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Spatie\QueryBuilder\QueryBuilder;
 use Vifrost\Laravel\Pagination;
 use Vifrost\Laravel\Vifrost;
@@ -51,13 +52,19 @@ class DummyCode:modelController extends Controller
      * Builds the query index() and show() run for a request. Vifrost's sync endpoint
      * also calls it, with a request built from a client's query string, to refresh the
      * lists a client shows when records change. Customize the query here rather than
-     * in index() (e.g. scoping it to the current tenant), so both stay in sync.
+     * in index() (e.g. scoping it to the current tenant), so both stay in sync. The sync
+     * endpoint does not run this route's middleware, so authorization lives here too:
+     * once DummyCode:model has a policy, its viewAny ability guards every list.
      *
      * @param  \Illuminate\Http\Request  $request
      * @return \Spatie\QueryBuilder\QueryBuilder
      */
     public function query(Request $request): QueryBuilder
     {
+        if (Gate::getPolicyFor(DummyCode:model::class)) {
+            Gate::authorize('viewAny', DummyCode:model::class);
+        }
+
         return QueryBuilder::for( (new Vifrost)->getQuery($request), $request )
             ->allowedFilters($this->allowedFilters())
             ->allowedIncludes($this->allowedIncludes())
