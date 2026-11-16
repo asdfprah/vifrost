@@ -95,6 +95,26 @@ return [
         // \App\Models\Category::class => null,
     ],
 
+    // Datasets (see "Datasets" below): rows of selected columns, joins and aggregates
+    // requested through a model's index route. Each part is enabled per controller;
+    // these options only bound what an enabled one can do.
+    'dataset' => [
+        // Max rows per request. A dataset always requires ?limit=; exceeding it is a 422.
+        'max_limit' => 1000,
+        // Per-model overrides. Unlike max_limit_per_model, null does not exempt.
+        'max_limit_per_model' => [
+            // \App\Models\Order::class => 5000,
+        ],
+        // Milliseconds each query of a dataset may run before the database cancels it
+        // (504). PostgreSQL, MySQL and MariaDB only; null disables it.
+        'timeout_ms' => 5000,
+        'timeout_ms_per_model' => [
+            // \App\Models\Order::class => 15000,
+        ],
+        // Max nesting of whereHas/whereDoesntHave, counting the first level.
+        'max_has_depth' => 3,
+    ],
+
     // Eloquent relation methods Vifrost looks for via reflection when mapping
     // a model's relations (see Mapper.php).
     'relations' => [
@@ -202,6 +222,96 @@ GET    /api/staffmember/5/roles/5,3
 scoped by the key, since Eloquent cannot save a model without a single primary
 key. Key values must not contain the separator.
 
+### Datasets
+
+A dataset is a collection request that returns rows of chosen columns instead of
+records: columns of the model and of the relations it joins, `whereHas` conditions,
+aggregates, groups and date periods — for charts, reports or exports. It is a `GET`
+to the model's index route with `?select=`, `?aggregate=` or `?group=`, so the route's
+middleware runs as for any listing, and it is built in the same `query()`.
+
+Generated controllers build `query()` with `Vifrost\Laravel\QueryBuilder`, Spatie's
+query builder plus four rules, each disabled until its private method returns
+something:
+
+```php
+private function allowedColumns(): array
+{
+    // Columns of the model, dotted for those of a joined or has relation.
+    return ['status', 'amount', 'placed_at', 'customer.name', 'items.price', 'items.refunds.reason'];
+}
+
+private function allowedJoins(): array
+{
+    // BelongsTo, HasOne, HasMany and BelongsToMany relations of the model.
+    return ['customer', 'items'];
+}
+
+private function allowedHas(): array
+{
+    // Relations for whereHas/whereDoesntHave; each nested level needs its parent too.
+    return ['items', 'items.refunds'];
+}
+
+private function allowedAggregates(): array
+{
+    return ['count', 'sum', 'avg', 'min', 'max'];
+}
+```
+
+Columns and relations only ever come from these lists; the request supplies values,
+which are bound. A request with dataset parameters for a model whose columns and
+aggregates are both empty gets a `400` ("Datasets are not enabled for …"). A column
+the model hides (`$hidden`, or missing from `$visible`) cannot be allowed at all.
+
+```
+GET /api/order
+  ?join=customer:left                           # inner by default
+  &select=customer.name
+  &aggregate[total]=count
+  &aggregate[revenue]=sum:amount
+  &where[0][column]=status&where[0][op]==&where[0][value]=done
+  &where[1][or][0][column]=amount&where[1][or][0][op]=>&where[1][or][0][value]=100
+  &has[items][count]=>=2
+  &has[items][where][0][column]=price&has[items][where][0][op]=>=&has[items][where][0][value]=50
+  &has[items][has][refunds][where][0][column]=reason&has[items][has][refunds][where][0][op]=in&has[items][has][refunds][where][0][value][0]=damaged
+  &group[]=customer.name                        # a column, also selected
+  &group[month]=placed_at:month                 # a period, selected under its key: day, week (from Monday), month or year
+  &sort=month,-total
+  &limit=100&offset=0
+```
+
+```json
+[{ "customer.name": "Alice", "month": "2026-01-01", "total": 4, "revenue": 350.0 }]
+```
+
+- Operators: `= != < <= > >= in notIn between null notNull`; `or`/`and` group conditions.
+  Conditions of a has level name its columns without the relation (`price`, not
+  `items.price`); `has[x][negate]=1` is a `whereDoesntHave`.
+- `?group=` takes columns, which must also be selected (as a list: `group[]=…`, or
+  `group=status,kind`), and date periods by key, each selected under that key as the
+  first date of its period. Once a dataset groups or aggregates, every selected column
+  must be grouped.
+  Aggregates alone return one row. Aggregates come back as numbers; columns as the
+  database returns them.
+- **Every joined or has relation is read through its own model's controller `query()`**,
+  so the tenant scope, global scopes and `viewAny` authorization of that model apply too
+  (a `403` there is a `403` for the dataset), along with the conditions the relation
+  method itself declares (`->where(...)`, `->wherePivot(...)`). When neither restricts it,
+  the table is joined directly instead of a subquery. A relation's model needs a
+  generated controller with `query()`.
+- `?limit=` is always required and must not exceed `dataset.max_limit` (`422` otherwise,
+  never clamped); `X-Total-Count` reports the rows of the whole dataset. Read a large one
+  page by page with `?offset=`.
+- On PostgreSQL, MySQL and MariaDB each query of a dataset runs under `dataset.timeout_ms`,
+  set on the session and restored afterwards; a cancelled one answers `504`.
+- `?filter=`, `?include=` and `?sort=` of Spatie do not apply to a dataset, and a single
+  record route (`{model}/{id}`) ignores dataset parameters.
+
+`vifrost:schema` exports what each model's rules allow, read from those private methods
+without running `query()`, so `@vifrost/codegen` can type its datasets (rules written
+inline in `query()` work the same, untyped).
+
 ### Exporting the schema for the JS/TS tooling
 
 ```bash
@@ -269,7 +379,9 @@ Options:
   -c, --client-import <specifier>  import specifier for the runtime client (default: "@vifrost/client")
 ```
 
-This produces one file per model:
+This produces one file per model, plus an `index.ts`. Files an earlier run generated
+for models no longer in the schema (excluded, deleted) are removed; files without the
+generated header are never touched.
 
 ```typescript
 // resources/js/models/Product.ts — generated, do not edit by hand
@@ -323,6 +435,14 @@ const one = await Product.query().whereId(1).first()
 // relations, from an already-loaded instance
 const category = await product.category()          // BelongsTo/HasOne/MorphOne -> Model | null
 const relatedProducts = await category.products()   // HasMany/BelongsToMany/etc -> Model[]
+
+// eager-loaded relations are read under their relation names, even though Laravel
+// serializes them in snake_case (`shipping_address` → `order.shippingAddress`)
+const [order] = await Order.query().with('shippingAddress').limit(1).get()
+
+// a query of a relation of one record, through its nested route — chainable and
+// watchable like any query of the related model
+const orders = await Customer.related(5, 'orders', Order).orderBy('id').limit(20).get()
 
 // create / update / delete
 const created = await new Product({ name: 'New', price: '9.99', category_id: 3 }).save()
@@ -404,6 +524,21 @@ Without a `Registry` configured, `save()`/`delete()` skip this entirely — the
 modularity is deliberate: a consumer who only wants the plain query API never pays
 for tracking it doesn't use.
 
+The instance the Registry tracks is the one every list shows, so an edit form should
+not type into it. `clone()` returns an untracked copy: changing it changes nothing
+else, and its `save()` updates the record and publishes the saved values only once
+the server accepts them:
+
+```typescript
+const draft = product.clone()
+draft.name = form.name
+await draft.save() // a rejection leaves every list showing the original values
+```
+
+Two queries of the same record with different `.with(...)` share its entry: a fetch
+with fewer relations keeps the ones it lacks, and a resync requests every relation
+any fetch of the record loaded.
+
 ### 2.3 Keeping lists in sync
 
 Lists watched through `@vifrost/vue`'s `useQuery` (or `getQueryCache().watch()`)
@@ -430,6 +565,34 @@ echo.private(`clinic.${clinicId}.patients`)
   .listen('.PatientDeleted', (event) => events.deleted(Patient, event.id))
 ```
 
+With Eloquent model broadcasting, the bridge is built in. On the model, the
+`Vifrost\Laravel\Broadcasting\BroadcastsVifrostEvents` trait broadcasts created,
+updated, deleted, trashed and restored events carrying only the record's key (every
+column of a composite one), so clients reload the record through the API, which
+applies authorization; the model still defines the channels:
+
+```php
+class Product extends Model
+{
+    use BroadcastsVifrostEvents;
+
+    public function broadcastOn(string $event): array
+    {
+        return [new PrivateChannel("store.{$this->store_id}")];
+    }
+}
+```
+
+On the client, `listenToModelBroadcasts()` reports every model event of a channel to
+the Registry, finding each model by its class name in the generated models module:
+
+```typescript
+import { listenToModelBroadcasts } from '@vifrost/client'
+import * as models from './models/index.js'
+
+listenToModelBroadcasts(echo.private(`store.${storeId}`), models)
+```
+
 Events that arrive close together (`debounceMs`, 50 by default) are handled at once.
 By default each affected list is refetched. To refresh them all in a single request,
 enable `sync_route` on the Laravel side and point the client at it:
@@ -449,15 +612,65 @@ Because it does not dispatch a request per list, **the route middleware of each 
 does not run**: `sync_route.middleware` guards them all (add your auth middleware
 there), and any customization of a list (e.g. scoping it to the current tenant) must
 live in the controller's `query()`, which `index()` and `show()` also use, rather than
-in `index()`. Controllers generated before `query()` existed, or an endpoint that is
+in `index()`. For the same reason the generated `query()` authorizes the model's
+`viewAny` ability as soon as the model has a policy, so a list the user may not read
+reports `403` in its own entry of the batch while the others still refresh. Controllers
+generated before that only need the same check at the top of their `query()`:
+
+```php
+if (Gate::getPolicyFor(Product::class)) {
+    Gate::authorize('viewAny', Product::class);
+}
+```
+
+Controllers generated before `query()` existed, or an endpoint that is
 disabled, make the client fall back to refetching. To register the endpoint inside a
 route group of your own, leave `enabled` false and call `Vifrost::syncRoute()` there.
+
+### 2.4 Datasets
+
+`Dataset.for()` builds a dataset (see "Datasets" in part 1). Its rows are frozen plain
+objects keyed by the requested columns and aggregates — not `Model` instances, and
+never tracked by the Registry. For a generated model whose controller allows datasets,
+the builder only accepts what the rules allow, and types each row by what it selects:
+
+```typescript
+import { Dataset } from '@vifrost/client'
+
+const rows = await Dataset.for(Order)
+  .leftJoin('customer')
+  .select('customer.name')
+  .groupByDate('placed_at', 'month', 'month')
+  .count('total')
+  .sum('amount', 'revenue')
+  .where('status', '=', 'done')
+  .whereAny((any) => any.where('amount', '>', 100).whereNull('discount_code'))
+  .whereHas('items', (item) => item.where('price', '>=', 50).whereHas('refunds', (refund) => refund.whereIn('reason', ['damaged'])), '>=', 2)
+  .whereDoesntHave('returns')
+  .groupBy('customer.name')
+  .orderBy('month')
+  .limit(100)
+  .get()
+// rows: readonly { 'customer.name': string | null; month: string; total: number; revenue: number | null }[]
+// rows.total: the rows of the whole dataset, for paging through an export
+```
+
+`.limit()` is always required, up to the model's `datasetMaxLimit`, and checked before
+any request. `Dataset.for(Customer.related(5, 'orders', Order))` or
+`Dataset.for('customer/5/orders')` start an untyped dataset of a relation. A
+controller without datasets rejects with `DatasetNotEnabledError`, and one the database
+cancelled with `DatasetTimeoutError`.
+
+`getDatasetCache().watch(builder)` (and `useDataset` in Vue) shares one request per
+identical dataset and, with a Registry, requests it again whenever a record of its model,
+or of a relation it joins or filters by, is reported created, updated or deleted. A
+dataset never takes part in a sync request.
 
 ---
 
 ## 3. Vue (`@vifrost/vue`)
 
-`useModel`/`useQuery` composables wrapping `@vifrost/client`, reactive to both
+`useModel`/`useQuery`/`useDataset` composables wrapping `@vifrost/client`, reactive to both
 their inputs (a ref/getter id or query) and — when a `Registry` is configured — to
 `Registry` events for the rows they're currently holding.
 
@@ -535,6 +748,29 @@ async function rename() {
   product.value!.name = 'Renamed'
   await product.value!.save() // any other component's useModel(Product, 1) updates too
 }
+</script>
+```
+
+`useDataset` works like `useQuery` for a dataset (part 2.4): a getter makes it request
+the dataset again when a dependency changes, cancelling the request it replaces.
+
+```vue
+<script setup lang="ts">
+import { Dataset } from '@vifrost/client'
+import { useDataset } from '@vifrost/vue'
+import { ref } from 'vue'
+import { Order } from './models/Order.js'
+
+const status = ref('done')
+
+const { data: perMonth, total, isLoading, error } = useDataset(() =>
+  Dataset.for(Order)
+    .groupByDate('placed_at', 'month', 'month')
+    .count('total')
+    .where('status', '=', status.value)
+    .orderBy('month')
+    .limit(24)
+)
 </script>
 ```
 
