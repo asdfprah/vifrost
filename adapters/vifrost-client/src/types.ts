@@ -230,6 +230,17 @@ export interface SyncResult {
  */
 export type ModelCollection<T> = T[] & { total: number }
 
+/** A Laravel Echo channel, or anything that can listen to every event of a channel the same way. */
+export interface ModelBroadcastChannel {
+  listenToAll(callback: (event: string, data: unknown) => void): unknown
+}
+
+/**
+ * The model classes broadcasts may name: the generated models module (`import * as models from
+ * './models'`), keyed by class name, or a list of model classes.
+ */
+export type BroadcastModels = Record<string, unknown> | ModelConstructor[]
+
 /** Aggregate functions a dataset can compute, when the model's controller allows them. */
 export type DatasetAggregate = 'count' | 'sum' | 'avg' | 'min' | 'max'
 

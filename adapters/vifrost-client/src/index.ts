@@ -1,4 +1,5 @@
 export { client, configure, getDatasetCache, getQueryCache, getRegistry, resetClient } from './config.js'
+export { handleModelBroadcast, listenToModelBroadcasts } from './broadcasts.js'
 export { Dataset, DatasetBuilder, DatasetConditions, DatasetNotEnabledError, DatasetTimeoutError } from './Dataset.js'
 export { HttpClient } from './HttpClient.js'
 export { HttpError } from './HttpError.js'
@@ -13,6 +14,7 @@ export { Registry } from './Registry.js'
 export type {
   AnyDatasetHasShape,
   AnyDatasetShape,
+  BroadcastModels,
   ConfigureOptions,
   DatasetCacheOptions,
   DatasetAggregate,
@@ -29,6 +31,7 @@ export type {
   DatasetSnapshot,
   DatasetValue,
   HttpClientOptions,
+  ModelBroadcastChannel,
   ModelCollection,
   ModelConstructor,
   ModelId,
