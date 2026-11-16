@@ -38,8 +38,10 @@ class Describer{
 
     /**
      * Search the foreign key of a given database column, preferring a single-column key over a
-     * composite one that also contains the column. The returned key's foreignColumn is the referenced
-     * column at the same position as the given local column.
+     * composite one that also contains the column. Among keys of the same size, it prefers the one
+     * whose referenced column at the local column's position is the primary key of the referenced
+     * table, which is the one that identifies the related record. The returned key's foreignColumn
+     * is the referenced column at the same position as the given local column.
      *
      * @param string $connection database connection name
      * @param string $table database table name
@@ -48,18 +50,40 @@ class Describer{
      * @return stdClass|null
      */
     public static function getForeignKeysFor( string $connection, string $table , string $column){
-        $candidates = array_filter(
+        $candidates = array_values(array_filter(
             self::getForeignKeys( $connection, $table ),
             fn ($foreign) => in_array( $column , $foreign->localColumn )
-        );
+        ));
         if( empty($candidates) ){
             return null;
         }
-        usort($candidates, fn ($a, $b) => count($a->localColumn) <=> count($b->localColumn));
-        $foreign = $candidates[0];
-        $position = array_search( $column, $foreign->localColumn );
-        $foreign->foreignColumn = $foreign->foreignColumnName[$position] ?? null;
-        return $foreign;
+        foreach ($candidates as $candidate) {
+            $position = array_search( $column, $candidate->localColumn );
+            $candidate->foreignColumn = $candidate->foreignColumnName[$position] ?? null;
+        }
+        $referencesPrimaryKey = fn ($foreign) => in_array(
+            $foreign->foreignColumn,
+            self::tablePrimaryKeyColumns( $connection, $foreign->foreignTable )
+        ) ? 0 : 1;
+        usort($candidates, fn ($a, $b) => [count($a->localColumn), $referencesPrimaryKey($a)]
+            <=> [count($b->localColumn), $referencesPrimaryKey($b)]);
+        return $candidates[0];
+    }
+
+    /**
+     * Returns the columns of the primary index of a given table
+     *
+     * @param string $connection database connection name
+     * @param string $table database table name
+     * @return array
+     */
+    private static function tablePrimaryKeyColumns(string $connection, string $table): array{
+        foreach (Schema::connection( $connection )->getIndexes( $table ) as $index) {
+            if( $index['primary'] ){
+                return $index['columns'];
+            }
+        }
+        return [];
     }
 
     /**
