@@ -11,6 +11,89 @@ const NO_INCLUDES: string[] = []
 const persistedInstances = new WeakSet<object>()
 
 /**
+ * The key Laravel serializes a loaded relation under, with `Model::$snakeAttributes` on.
+ *
+ * @param {string} relationName the relation's method name, e.g. `orderItems`
+ * @returns {string} e.g. `order_items`
+ */
+function snakeCase(relationName: string): string {
+  return relationName.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)
+}
+
+/**
+ * Moves loaded relations of a record from their snake_case keys to their relation names.
+ *
+ * @param {Record<string, unknown>} record a record as the server sent it, changed in place
+ * @param {string[]} relationNames
+ * @returns {void}
+ */
+function renameRelationKeys(record: Record<string, unknown>, relationNames: string[]): void {
+  for (const name of relationNames) {
+    const serializedKey = snakeCase(name)
+    if (serializedKey === name || !hasOwn(record, serializedKey) || hasOwn(record, name)) {
+      continue
+    }
+    record[name] = record[serializedKey]
+    delete record[serializedKey]
+  }
+}
+
+/**
+ * Renames the relations along one dotted include path, through every record of a to-many level.
+ *
+ * @param {unknown} value a record, a list of records, or a relation that was not loaded
+ * @param {string[]} segments the relation names of the path still to rename
+ * @returns {void}
+ */
+function renameIncludePath(value: unknown, segments: string[]): void {
+  if (segments.length === 0) {
+    return
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item) => renameIncludePath(item, segments))
+    return
+  }
+  if (typeof value !== 'object' || value === null) {
+    return
+  }
+  const [name, ...rest] = segments
+  const record = value as Record<string, unknown>
+  renameRelationKeys(record, [name])
+  renameIncludePath(record[name], rest)
+}
+
+/**
+ * A copy of a record's attributes with its loaded relations, and those nested along its
+ * includes, under their relation names instead of the snake_case keys Laravel serializes.
+ *
+ * @param {Record<string, unknown>} attributes a record as the server sent it
+ * @param {string[]} relationNames the relations its model declares
+ * @param {string[]} includes the dotted relation paths it was fetched with
+ * @returns {Record<string, unknown>}
+ */
+function normalizeRelationKeys(
+  attributes: Record<string, unknown>,
+  relationNames: string[],
+  includes: string[]
+): Record<string, unknown> {
+  const normalized = { ...attributes }
+  renameRelationKeys(normalized, relationNames)
+  for (const path of includes) {
+    renameIncludePath(normalized, path.split('.'))
+  }
+  return normalized
+}
+
+/**
+ * @param {object} target
+ * @param {string} key
+ * @returns {boolean} whether the key is an own property of the target
+ */
+function hasOwn(target: object, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(target, key)
+}
+
+/**
  * Base class generated `@vifrost/codegen` subclasses extend.
  *
  * @remarks
@@ -131,10 +214,10 @@ export class Model {
     attributes: Record<string, unknown>,
     includes: string[] = NO_INCLUDES
   ): T {
-    const instance = new this(attributes)
+    const instance = new this(normalizeRelationKeys(attributes, this.relations, includes))
     persistedInstances.add(instance)
     const registry = getRegistry()
-    const primaryKeyValue = this.keyOf(attributes)
+    const primaryKeyValue = this.keyOf(instance)
     if (registry && primaryKeyValue !== null) {
       registry.track(this.resource, primaryKeyValue, instance, () =>
         this.query()
@@ -148,7 +231,7 @@ export class Model {
     if (mode === 'off' || this.relations.length === 0) {
       return instance
     }
-    const unloadedRelationNames = this.relations.filter((name) => !(name in attributes))
+    const unloadedRelationNames = this.relations.filter((name) => !hasOwn(instance, name))
     const guarded = guardUnloadedRelations(instance, unloadedRelationNames, mode)
     persistedInstances.add(guarded)
     return guarded
@@ -197,6 +280,8 @@ export class Model {
    * already subscribed to this record from an earlier fetch. It also tells
    * the Registry's resource listeners (such as the lists of `QueryCache`),
    * since a created or updated record can enter or leave them.
+   *
+   * @returns {Promise<this>}
    */
   async save(): Promise<this> {
     const modelConstructor = this.constructor as ModelConstructor
@@ -207,7 +292,7 @@ export class Model {
       ? await client().put<Record<string, unknown>>(`${modelConstructor.resource}/${this.primaryKeyValue()}`, attributes)
       : await client().post<Record<string, unknown>>(modelConstructor.resource, attributes)
 
-    Object.assign(this, updatedRow)
+    Object.assign(this, normalizeRelationKeys(updatedRow, modelConstructor.relations, NO_INCLUDES))
     persistedInstances.add(this)
 
     const registry = getRegistry()
