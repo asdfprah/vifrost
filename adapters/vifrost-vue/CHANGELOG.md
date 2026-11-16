@@ -1,3 +1,25 @@
+## [0.5.0](https://github.com/asdfprah/vifrost/compare/vifrost-vue-v0.4.0...vifrost-vue-v0.5.0) (2026-11-16)
+
+### Features
+
+* **client:** add datasets ([83ddc3f](https://github.com/asdfprah/vifrost/commit/83ddc3fc8a484f2cbb5cd8e64515391fd3a7acc9))
+* **client:** add Model.related() to query a relation of one record ([67fe274](https://github.com/asdfprah/vifrost/commit/67fe274433cd9025ec6a7960328afcbab27f9dc4)), closes [#43](https://github.com/asdfprah/vifrost/issues/43)
+* **client:** add Model[#clone](https://github.com/asdfprah/vifrost/issues/clone)() to edit a record apart from the tracked one ([ee765ee](https://github.com/asdfprah/vifrost/commit/ee765ee72abff7ac0ea51fd434b2b84c8b442342)), closes [#44](https://github.com/asdfprah/vifrost/issues/44)
+* **client:** report Eloquent model broadcasts to the Registry ([ba38a7d](https://github.com/asdfprah/vifrost/commit/ba38a7dad0df2afa73a10e02fc17a09446ed264a)), closes [#46](https://github.com/asdfprah/vifrost/issues/46)
+* **codegen:** type the datasets each model allows ([cbd13db](https://github.com/asdfprah/vifrost/commit/cbd13dbc682d29a9ad3a57ac1152a299e3219e3a))
+* **laravel:** add a trait that broadcasts model events with only their key ([a73448c](https://github.com/asdfprah/vifrost/commit/a73448c1376f0d55b3cfc56ca3b06e2f855072a7)), closes [#46](https://github.com/asdfprah/vifrost/issues/46)
+* **laravel:** add datasets to the generated query builder ([a806980](https://github.com/asdfprah/vifrost/commit/a80698019b26189e13a374b4cf925becdae9c2a8))
+* **vue:** add useDataset ([7bc58dd](https://github.com/asdfprah/vifrost/commit/7bc58dde92cbb72344f109aaf4ac7fe7e294b4b3))
+
+### Bug Fixes
+
+* **client:** keep the relations a record loaded when another query refetches it ([df23bcd](https://github.com/asdfprah/vifrost/commit/df23bcd9594d01d5563dd65015c72dc92f5514d5)), closes [#47](https://github.com/asdfprah/vifrost/issues/47)
+* **client:** read loaded relations under their relation names ([b1e5f01](https://github.com/asdfprah/vifrost/commit/b1e5f01b2e5531c97f5cf42fab8acd5084d8a391)), closes [#42](https://github.com/asdfprah/vifrost/issues/42)
+* **codegen:** remove generated files of models no longer in the schema ([6d780c0](https://github.com/asdfprah/vifrost/commit/6d780c093bd6746dcb298140714ef91d943e274f)), closes [#40](https://github.com/asdfprah/vifrost/issues/40)
+* **laravel:** authorize viewAny in the generated query() once the model has a policy ([8198a0c](https://github.com/asdfprah/vifrost/commit/8198a0cccf44940cf9862b97257ef90bfd080bda)), closes [#45](https://github.com/asdfprah/vifrost/issues/45)
+* **laravel:** prefer the composite foreign key that references the primary key ([61f25b1](https://github.com/asdfprah/vifrost/commit/61f25b14616ad936d20e4f36b0021a96b2899510)), closes [#41](https://github.com/asdfprah/vifrost/issues/41)
+* **laravel:** report a sync query the user may not read as 403 in its own entry ([a35fcc5](https://github.com/asdfprah/vifrost/commit/a35fcc545e195b80b6405bf2f0bb2a83b63c9289)), closes [#39](https://github.com/asdfprah/vifrost/issues/39)
+
 ## [0.4.0](https://github.com/asdfprah/vifrost/compare/vifrost-vue-v0.3.0...vifrost-vue-v0.4.0) (2026-10-30)
 
 ### Features
