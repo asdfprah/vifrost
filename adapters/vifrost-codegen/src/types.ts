@@ -30,6 +30,29 @@ export interface VifrostRelation {
   polymorphic: boolean
 }
 
+/** One column a dataset may use, as `Vifrost\Laravel\Dataset\DatasetSchema` exports it. */
+export interface VifrostDatasetColumn {
+  type: string
+  rawType: string
+  isNullable: boolean
+}
+
+/** A has level of a dataset: the related model, its allowed columns and the levels below it. */
+export interface VifrostDatasetHas {
+  model: string
+  columns: Record<string, VifrostDatasetColumn>
+  has: Record<string, VifrostDatasetHas>
+}
+
+/** Mirrors `Vifrost\Laravel\Dataset\DatasetSchema::for()` in the Laravel package. */
+export interface VifrostDatasetSchema {
+  maxLimit: number
+  columns: Record<string, VifrostDatasetColumn>
+  joins: Record<string, { model: string; type: string; columns: Record<string, VifrostDatasetColumn> }>
+  has: Record<string, VifrostDatasetHas>
+  aggregates: string[]
+}
+
 export interface VifrostModelSchema {
   table: string
   /** The key column, the columns of a composite key in URL order, or `null` for a table without a primary key. */
@@ -44,6 +67,8 @@ export interface VifrostModelSchema {
   maxLimit: number | null
   attributes: Record<string, VifrostAttribute>
   relations: Record<string, VifrostRelation>
+  /** Present only when the model's controller allows datasets. */
+  dataset?: VifrostDatasetSchema
 }
 
 export interface VifrostSchema {
@@ -62,6 +87,8 @@ export interface TypeMapOptions {
 }
 
 export interface GenerateOptions extends TypeMapOptions {
+  /** Resource names of every model of the schema, by model FQCN, to list the resources a dataset reads. */
+  resources?: Record<string, string>
   /** Import specifier used for the runtime client. Defaults to `"@vifrost/client"`. */
   clientImport?: string
   /** Separator of composite key values, emitted as `static keySeparator` when it is not `","`. */
