@@ -219,11 +219,16 @@ export class Model {
     const registry = getRegistry()
     const primaryKeyValue = this.keyOf(instance)
     if (registry && primaryKeyValue !== null) {
-      registry.track(this.resource, primaryKeyValue, instance, () =>
-        this.query()
-          .with(...includes)
-          .whereId(primaryKeyValue)
-          .first() as Promise<T>
+      registry.track(
+        this.resource,
+        primaryKeyValue,
+        instance,
+        (relations = includes) =>
+          this.query()
+            .with(...relations)
+            .whereId(primaryKeyValue)
+            .first() as Promise<T>,
+        includes
       )
     }
 
@@ -298,7 +303,13 @@ export class Model {
     const registry = getRegistry()
     const savedId = modelConstructor.keyOf(this)
     if (registry && savedId !== null) {
-      registry.track(modelConstructor.resource, savedId, this, () => modelConstructor.find(savedId))
+      registry.track(modelConstructor.resource, savedId, this, (relations = NO_INCLUDES) =>
+        modelConstructor
+          .query()
+          .with(...relations)
+          .whereId(savedId)
+          .first() as Promise<Model>
+      )
       registry.publish(modelConstructor.resource, { type: isUpdate ? 'updated' : 'created', id: savedId })
     }
 

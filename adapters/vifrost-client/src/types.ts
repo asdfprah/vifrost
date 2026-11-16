@@ -113,8 +113,8 @@ export interface ModelConstructor<T extends Model = Model> {
   query<R extends Model>(this: ModelConstructor<R>): QueryBuilder<R>
 }
 
-/** Re-fetches the current value tracked by a {@link Registry} entry. */
-export type ResyncFn<T> = () => Promise<T>
+/** Re-fetches the current value tracked by a {@link Registry} entry, loading the given relations. */
+export type ResyncFn<T> = (includes?: string[]) => Promise<T>
 
 export interface RegistryUpdatedEvent<T> {
   type: 'updated'
@@ -146,6 +146,8 @@ export type RegistryResourceListener = (resourceType: string, event: RegistryRes
 export interface RegistryEntry<T> {
   value: T
   resync: ResyncFn<T>
+  /** Every relation a fetch of this record loaded, requested again on resync. */
+  includes: Set<string>
   listeners: Set<RegistryListener<T>>
 }
 

@@ -73,3 +73,36 @@ describe('loaded relations serialized in snake_case', () => {
     expect(() => (order.courier as unknown as { name: string }).name).toThrow(/hasn't been loaded/)
   })
 })
+
+describe('one record fetched by queries with different includes', () => {
+  it('keeps the relations a later fetch did not load', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse([{ id: 1, status: 'open', shipping_address: { id: 7, street: 'Main St' } }]))
+      .mockResolvedValueOnce(jsonResponse([{ id: 1, status: 'done' }]))
+
+    await Order.query().with('shippingAddress').limit(10).get()
+    const listener = vi.fn()
+    registry.subscribe('order', 1, listener)
+    await Order.query().limit(10).get()
+
+    const [event] = listener.mock.calls[0]
+    expect(event.value.status).toBe('done')
+    expect(event.value.shippingAddress).toEqual({ id: 7, street: 'Main St' })
+  })
+
+  it('resyncs with every relation any fetch of the record loaded', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse([{ id: 1, shipping_address: { id: 7 } }]))
+      .mockResolvedValueOnce(jsonResponse([{ id: 1, courier: { id: 2 } }]))
+      .mockResolvedValueOnce(jsonResponse([{ id: 1 }]))
+      .mockResolvedValueOnce(jsonResponse({ id: 1, shipping_address: { id: 7 }, courier: { id: 2 } }))
+
+    await Order.query().with('shippingAddress').limit(10).get()
+    await Order.query().with('courier').limit(10).get()
+    await Order.query().limit(10).get()
+    await registry.resync('order', 1)
+
+    const resyncUrl = decodeURIComponent(fetchMock.mock.calls[3][0] as string)
+    expect(resyncUrl).toContain('order/1?include=shippingAddress,courier')
+  })
+})
