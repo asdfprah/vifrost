@@ -1,10 +1,10 @@
 import { client, getRegistry, getUnloadedRelationAccess } from './config.js'
 import { guardUnloadedRelations } from './RelationGuard.js'
 import { QueryBuilder } from './QueryBuilder.js'
+import { readTotalCount } from './collection.js'
 import { toModelCollection } from './ModelCollection.js'
 import { buildQueryString, createQueryState } from './queryString.js'
-import type { ModelCollection } from './ModelCollection.js'
-import type { ModelConstructor, ModelId, PrimaryKey } from './types.js'
+import type { ModelCollection, ModelConstructor, ModelId, PrimaryKey } from './types.js'
 
 const NO_INCLUDES: string[] = []
 
@@ -187,17 +187,6 @@ export class Model {
   }
 
   /**
-   * Reads `X-Total-Count` off a collection response's headers — how many rows
-   * match the request in total, independent of how many this page returned.
-   * Falls back to the page size itself if the header is missing (an older
-   * backend, or a response mocked without it in a test), so `.total` is
-   * always a valid number rather than `NaN`.
-   */
-  private static readTotalCount(headers: Headers, pageSize: number): number {
-    return Number(headers.get('X-Total-Count') ?? pageSize)
-  }
-
-  /**
    * Wraps raw JSON in a Model instance and, if a {@link Registry} was passed
    * to {@link configure}, registers it so a future "this record changed"
    * event can find and refresh it. Every fetch path (find/all/query/
@@ -310,7 +299,7 @@ export class Model {
         const { body: rows, headers } = await client().get<Record<string, unknown>[]>(pathWithQuery)
         return toModelCollection(
           rows.map((row) => model.instantiate(row, includes)),
-          Model.readTotalCount(headers, rows.length)
+          readTotalCount(headers, rows.length)
         )
       },
       async (id, includes) => {
@@ -450,7 +439,7 @@ export class Model {
     )
     return toModelCollection(
       rows.map((row) => related.instantiate(row)),
-      Model.readTotalCount(headers, rows.length)
+      readTotalCount(headers, rows.length)
     )
   }
 

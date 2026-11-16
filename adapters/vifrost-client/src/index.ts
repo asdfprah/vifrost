@@ -8,10 +8,10 @@ export { events } from './events.js'
 export { QueryCache } from './QueryCache.js'
 export { buildQueryString, createQueryState } from './queryString.js'
 export { Registry } from './Registry.js'
-export type { ModelCollection } from './ModelCollection.js'
 export type {
   ConfigureOptions,
   HttpClientOptions,
+  ModelCollection,
   ModelConstructor,
   ModelId,
   PrimaryKey,
@@ -29,4 +29,6 @@ export type {
   RegistryUpdatedEvent,
   ResyncFn,
   SyncOptions,
+  WatchHandle,
+  WatchedEntry,
 } from './types.js'

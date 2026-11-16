@@ -1,7 +1,6 @@
 import { buildQueryString, createQueryState } from './queryString.js'
 import { toModelCollection } from './ModelCollection.js'
-import type { ModelCollection } from './ModelCollection.js'
-import type { ModelConstructor, ModelId, QueryState } from './types.js'
+import type { ModelCollection, ModelConstructor, ModelId, QueryState } from './types.js'
 
 /**
  * Fluent query builder returned by {@link Model.query}.

@@ -161,13 +161,25 @@ export interface QuerySnapshot<T> {
 
 export type QueryListener<T> = (snapshot: QuerySnapshot<T>) => void
 
-/** What {@link QueryCache.watch} returns: a live view of one query, released when no longer needed. */
-export interface QueryHandle<T> {
-  snapshot(): QuerySnapshot<T>
-  subscribe(listener: QueryListener<T>): () => void
+/** A live view of one watched query or dataset, released when no longer needed. */
+export interface WatchHandle<S> {
+  snapshot(): S
+  subscribe(listener: (snapshot: S) => void): () => void
   refetch(): Promise<void>
   release(): void
 }
+
+/** One entry of a cache, shared by every watcher of its key. */
+export interface WatchedEntry<S> {
+  watchers: number
+  snapshot(): S
+  subscribe(listener: (snapshot: S) => void): () => void
+  refetch(): Promise<void>
+  dispose(): void
+}
+
+/** What {@link QueryCache.watch} returns: a live view of one query, released when no longer needed. */
+export type QueryHandle<T> = WatchHandle<QuerySnapshot<T>>
 
 /** What a {@link QueryCache} works with. */
 export interface QueryCacheOptions {
@@ -185,3 +197,13 @@ export interface SyncResult {
   total?: number
   rows?: Record<string, unknown>[]
 }
+
+/**
+ * What every collection-returning fetch (`Model.all()`, `QueryBuilder.get()`,
+ * a to-many relation loader) resolves to: a real array — `instanceof Array`,
+ * `.map()`/`.length`/spread/`JSON.stringify` all behave exactly like `T[]` —
+ * with one extra non-enumerable property carrying the total row count the server reports via
+ * the `X-Total-Count` response header (see Controller.stub on the Laravel
+ * side), independent of how many rows this particular page actually returned.
+ */
+export type ModelCollection<T> = T[] & { total: number }
