@@ -89,3 +89,9 @@ export interface RelationMethod {
    */
   hasMethod: boolean
 }
+
+/** What `writeGeneratedFiles` did in the output directory. */
+export interface WriteResult {
+  written: string[]
+  removed: string[]
+}
