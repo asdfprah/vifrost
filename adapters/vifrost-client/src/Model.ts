@@ -272,12 +272,44 @@ export class Model {
   }
 
   static query<T extends Model>(this: ModelConstructor<T>): QueryBuilder<T> {
-    return new QueryBuilder<T>(
-      this.resource,
-      async (path, includes) => {
-        const { body: rows, headers } = await client().get<Record<string, unknown>[]>(path)
+    return Model.collectionQuery(this.resource, this)
+  }
+
+  /**
+   * A query of the records of a relation of one record, read through its nested route
+   * (`GET {resource}/{id}/{relation}`): it supports `where`/`orderBy`/`with`/`limit`/`offset`
+   * like any query of the related model, can be watched with `useQuery`, and stays in sync
+   * like any list of the related resource.
+   *
+   * @param {ModelId} id the key of the record whose relation is read
+   * @param {string} relationName the relation's name, as in the nested route
+   * @param {ModelConstructor<R>} related the related model class
+   * @returns {QueryBuilder<R>}
+   */
+  static related<R extends Model>(
+    this: ModelConstructor,
+    id: ModelId,
+    relationName: string,
+    related: ModelConstructor<R>
+  ): QueryBuilder<R> {
+    return Model.collectionQuery(`${this.resource}/${this.encodeId(id)}/${relationName}`, related)
+  }
+
+  /**
+   * A query of the records a collection path lists, instantiated as a model: the model's own
+   * index, or a relation of one record. Its records are read one by one at `{path}/{id}`.
+   *
+   * @param {string} path the collection path, relative to the API root
+   * @param {ModelConstructor<R>} model the model class of the records
+   * @returns {QueryBuilder<R>}
+   */
+  private static collectionQuery<R extends Model>(path: string, model: ModelConstructor<R>): QueryBuilder<R> {
+    return new QueryBuilder<R>(
+      path,
+      async (pathWithQuery, includes) => {
+        const { body: rows, headers } = await client().get<Record<string, unknown>[]>(pathWithQuery)
         return toModelCollection(
-          rows.map((row) => this.instantiate(row, includes)),
+          rows.map((row) => model.instantiate(row, includes)),
           Model.readTotalCount(headers, rows.length)
         )
       },
@@ -285,12 +317,13 @@ export class Model {
         const state = createQueryState()
         state.includes = includes
         const { body: row } = await client().get<Record<string, unknown>>(
-          `${this.resource}/${this.encodeId(id)}${buildQueryString(state)}`
+          `${path}/${model.encodeId(id)}${buildQueryString(state)}`
         )
-        return this.instantiate(row, includes)
+        return model.instantiate(row, includes)
       },
-      this.maxLimit,
-      this
+      model.maxLimit,
+      model,
+      model.resource
     )
   }
 
