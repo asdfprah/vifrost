@@ -1,3 +1,11 @@
+## [0.10.0](https://github.com/asdfprah/vifrost/compare/v0.9.0...v0.10.0) (2026-11-17)
+
+### Features
+
+* **client:** add DatasetBuilder[#timezone](https://github.com/asdfprah/vifrost/issues/timezone)() ([1a10386](https://github.com/asdfprah/vifrost/commit/1a10386bb7326f8dfe80594b98df3cf84d9efcc2))
+* **laravel:** read date periods in a time zone ([963241a](https://github.com/asdfprah/vifrost/commit/963241a9dca4e79b1161718638cc268638633ca3))
+* **laravel:** take dataset rules from one allowedDataset() method ([b6f46de](https://github.com/asdfprah/vifrost/commit/b6f46de443f37bb445dd7c64de8444611b3b8727))
+
 ## [0.9.0](https://github.com/asdfprah/vifrost/compare/v0.8.0...v0.9.0) (2026-11-16)
 
 ### Features
