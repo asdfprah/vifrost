@@ -38,8 +38,8 @@ return [
     ],
 
     // Datasets: rows of selected columns, joins and aggregates requested through a model's
-    // index route. Each part is enabled per controller with the allowedColumns/Joins/Has/
-    // Aggregates methods of its query(); these options only bound what an enabled one can do.
+    // index route. Each part is enabled per controller in the allowedDataset() of its query();
+    // these options only bound what an enabled one can do.
     'dataset' => [
         // Max rows per request. A dataset always requires ?limit=; exceeding it is a 422.
         'max_limit' => 1000,
@@ -55,6 +55,11 @@ return [
         ],
         // Max nesting of whereHas/whereDoesntHave, counting the first level. Deeper is a 400.
         'max_has_depth' => 3,
+        // Time zone date periods of ?group= are computed in, e.g. 'America/New_York'; a request
+        // overrides it with ?tz=. null groups values as the database returns them.
+        'timezone' => null,
+        // Time zone the app stores datetimes without a zone in; null means config('app.timezone').
+        'storage_timezone' => null,
     ],
 
     'relations'   => [

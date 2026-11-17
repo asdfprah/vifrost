@@ -216,6 +216,7 @@ export class DatasetBuilder<
   private readonly sorts: string[] = []
   private readonly root = new DatasetConditions<S, string>()
   private limitCount?: number
+  private timezoneName?: string
   private offsetCount?: number
 
   /**
@@ -498,6 +499,18 @@ export class DatasetBuilder<
   }
 
   /**
+   * The time zone the periods of {@link DatasetBuilder.groupByDate} start and end in, e.g.
+   * `'America/New_York'`, instead of the server's default.
+   *
+   * @param {string} name a time zone identifier
+   * @returns {this}
+   */
+  timezone(name: string): this {
+    this.timezoneName = name
+    return this
+  }
+
+  /**
    * Sorts by a key of the rows: a selected column, a date period or an aggregate.
    *
    * @param {keyof Row & string} key
@@ -561,6 +574,9 @@ export class DatasetBuilder<
     this.groups.forEach((column, index) => params.set(`group[${index}]`, column))
     for (const [key, spec] of this.periods) {
       params.set(`group[${key}]`, spec)
+    }
+    if (this.timezoneName !== undefined) {
+      params.set('tz', this.timezoneName)
     }
     if (this.sorts.length > 0) {
       params.set('sort', this.sorts.join(','))

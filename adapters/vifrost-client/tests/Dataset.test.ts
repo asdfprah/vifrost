@@ -126,6 +126,12 @@ describe('Dataset.for()', () => {
     })
   })
 
+  it('reads date periods in a time zone', () => {
+    const params = paramsOf(Dataset.for(Order).groupByDate('placed_on', 'day', 'day').count('total').timezone('America/New_York').limit(31).toPath())
+
+    expect(params).toMatchObject({ 'group[day]': 'placed_on:day', tz: 'America/New_York' })
+  })
+
   it('groups by columns and date periods in one parameter', () => {
     const params = paramsOf(
       Dataset.for(Order).select('status').groupByDate('placed_on', 'week', 'week').count('total').groupBy('status').limit(10).toPath()

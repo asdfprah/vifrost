@@ -70,6 +70,8 @@ beforeEach(function () {
         $table->string('status');
         $table->decimal('amount', 8, 2);
         $table->date('placed_on');
+        $table->timestamp('placed_at');
+        $table->timestampTz('confirmed_at');
     });
     Schema::create('ds_order_items', function (Blueprint $table) {
         $table->id();
@@ -94,20 +96,22 @@ beforeEach(function () {
     $carol = Customer::create(['name' => 'Carol', 'api_token' => 'token-c', 'active' => false]);
 
     $orders = [
-        [$alice, 'done', 100, '2026-01-10', [['cable', 20, []], ['mouse', 40, [['X1', false]]]]],
-        [$alice, 'done', 50, '2026-01-20', [['cable', 20, []]]],
-        [$bob, 'open', 30, '2026-02-01', []],
-        [$bob, 'done', 70, '2026-02-05', [['mouse', 40, [['X3', false]]], ['monitor', 300, [['X2', true]]]]],
-        [$carol, 'done', 999, '2026-02-07', [['monitor', 300, []]]],
-        [null, 'open', 10, '2026-03-01', []],
+        [$alice, 'done', 100, '2026-01-10', '2026-11-17 01:30:00', [['cable', 20, []], ['mouse', 40, [['X1', false]]]]],
+        [$alice, 'done', 50, '2026-01-20', '2026-12-01 01:30:00', [['cable', 20, []]]],
+        [$bob, 'open', 30, '2026-02-01', '2026-11-20 15:00:00', []],
+        [$bob, 'done', 70, '2026-02-05', '2026-11-20 16:00:00', [['mouse', 40, [['X3', false]]], ['monitor', 300, [['X2', true]]]]],
+        [$carol, 'done', 999, '2026-02-07', '2026-12-05 12:00:00', [['monitor', 300, []]]],
+        [null, 'open', 10, '2026-03-01', '2026-12-06 12:00:00', []],
     ];
     $watchers = [1 => [[$alice, true], [$bob, false]], 2 => [[$alice, false]], 4 => [[$carol, true], [$bob, true]]];
-    foreach ($orders as [$customer, $status, $amount, $date, $items]) {
+    foreach ($orders as [$customer, $status, $amount, $date, $placedAt, $items]) {
         $order = Order::create([
             'customer_id' => $customer?->id,
             'status' => $status,
             'amount' => $amount,
             'placed_on' => $date,
+            'placed_at' => $placedAt,
+            'confirmed_at' => $placedAt,
         ]);
         foreach ($watchers[$order->id] ?? [] as [$watcher, $isPrimary]) {
             DB::table('ds_order_watchers')->insert(['order_id' => $order->id, 'customer_id' => $watcher->id, 'is_primary' => $isPrimary]);
@@ -246,6 +250,69 @@ it('groups by date periods, each the first date of its period', function (string
     'year' => ['year', ['2026-01-01' => 6]],
 ]);
 
+it('groups datetimes by the periods of a time zone', function (string $column, string $unit, array $query, array $expected) {
+    if (DB::connection()->getDriverName() === 'sqlite') {
+        $this->markTestSkipped('SQLite has no time zones.');
+    }
+
+    $rows = requestDataset($query + [
+        'group' => ['period' => "{$column}:{$unit}"],
+        'aggregate' => ['total' => 'count'],
+        'sort' => 'period',
+        'limit' => 10,
+    ])->assertOk()->json();
+
+    expect(array_combine(array_column($rows, 'period'), array_column($rows, 'total')))->toBe($expected);
+})->with([
+    'a day, as stored' => ['placed_at', 'day', [], ['2026-11-17' => 1, '2026-11-20' => 2, '2026-12-01' => 1, '2026-12-05' => 1, '2026-12-06' => 1]],
+    'a day, in ?tz=' => ['placed_at', 'day', ['tz' => 'America/Santiago'], ['2026-11-16' => 1, '2026-11-20' => 2, '2026-11-30' => 1, '2026-12-05' => 1, '2026-12-06' => 1]],
+    'a month, in ?tz=' => ['placed_at', 'month', ['tz' => 'America/Santiago'], ['2026-11-01' => 4, '2026-12-01' => 2]],
+    'a month of a column with a zone, in ?tz=' => ['confirmed_at', 'month', ['tz' => 'America/Santiago'], ['2026-11-01' => 4, '2026-12-01' => 2]],
+]);
+
+it('reads periods in the configured time zone unless ?tz= says otherwise', function () {
+    if (DB::connection()->getDriverName() === 'sqlite') {
+        $this->markTestSkipped('SQLite has no time zones.');
+    }
+    config(['vifrost.dataset.timezone' => 'America/Santiago']);
+
+    $periods = fn (array $query) => array_column(requestDataset($query + [
+        'group' => ['month' => 'placed_at:month'],
+        'aggregate' => ['total' => 'count'],
+        'sort' => 'month',
+        'limit' => 10,
+    ])->assertOk()->json(), 'total');
+
+    expect($periods([]))->toBe([4, 2])
+        ->and($periods(['tz' => 'UTC']))->toBe([3, 3]);
+});
+
+it('leaves date columns alone, since they have no time', function () {
+    $rows = requestDataset([
+        'group' => ['month' => 'placed_on:month'],
+        'aggregate' => ['total' => 'count'],
+        'tz' => 'Pacific/Kiritimati',
+        'sort' => 'month',
+        'limit' => 10,
+    ])->assertOk()->json();
+
+    expect(array_column($rows, 'total'))->toBe([2, 3, 1]);
+});
+
+it('rejects a time zone that does not exist', function () {
+    requestDataset(['group' => ['day' => 'placed_at:day'], 'aggregate' => ['total' => 'count'], 'tz' => 'Mars/Olympus', 'limit' => 10])
+        ->assertStatus(400);
+});
+
+it('rejects converting datetimes on SQLite, which has no time zones', function () {
+    if (DB::connection()->getDriverName() !== 'sqlite') {
+        $this->markTestSkipped('Only SQLite lacks time zones.');
+    }
+
+    requestDataset(['group' => ['day' => 'placed_at:day'], 'aggregate' => ['total' => 'count'], 'tz' => 'America/Santiago', 'limit' => 10])
+        ->assertStatus(400);
+});
+
 it('groups by date periods next to columns', function () {
     $rows = requestDataset([
         'select' => 'status',
@@ -347,6 +414,7 @@ it('reports a mistake in the rules as an error of the app', function (callable $
     'a hidden column' => [fn () => OrderController::$columns[] = 'customer.api_token'],
     'a nested has without its parent' => [fn () => OrderController::$has = ['items.refunds']],
     'a join that is not BelongsTo, HasOne, HasMany or BelongsToMany' => [fn () => OrderController::$joins[] = 'refunds'],
+    'a rule that does not exist' => [fn () => OrderController::$extra = ['filters' => ['status']]],
 ]);
 
 it('says datasets are not enabled when no column or aggregate is allowed', function () {
@@ -414,7 +482,7 @@ it('exports what the datasets of a model allow, read from its controller rule me
     $dataset = $schema['models'][Order::class]['dataset'];
 
     expect($dataset['maxLimit'])->toBe(50)
-        ->and(array_keys($dataset['columns']))->toBe(['status', 'amount', 'placed_on', 'customer_id'])
+        ->and(array_keys($dataset['columns']))->toBe(['status', 'amount', 'placed_on', 'placed_at', 'confirmed_at', 'customer_id'])
         ->and($dataset['columns']['customer_id']['isNullable'])->toBeTrue()
         ->and($dataset['joins']['customer'])->toMatchArray(['model' => Customer::class, 'type' => 'BelongsTo'])
         ->and(array_keys($dataset['joins']['customer']['columns']))->toBe(['name'])

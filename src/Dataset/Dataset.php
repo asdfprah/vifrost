@@ -3,6 +3,7 @@
 namespace Vifrost\Laravel\Dataset;
 
 use Closure;
+use DateTimeZone;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -11,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Query\Expression;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 use LogicException;
 
 /**
@@ -354,13 +356,121 @@ class Dataset
 
             $expression = self::periodExpression(
                 $query->getConnection()->getDriverName(),
-                $grammar->wrap($this->rootColumn($model, $path)),
+                $this->inTimezone($query, $model, $path, $grammar->wrap($this->rootColumn($model, $path))),
                 $unit
             );
             $alias = $this->addOutput((string) $key, null);
             $query->selectRaw($expression . ' as ' . $grammar->wrap($alias));
             $query->groupBy(new Expression($expression));
         }
+    }
+
+    /**
+     * A date or datetime column as a local date and time of the dataset's time zone, so a period
+     * starts and ends when it does where the dataset is read. Date columns have no time to
+     * convert, and without a time zone values are grouped as the database returns them.
+     *
+     * @param \Illuminate\Database\Eloquent\Builder $query
+     * @param \Illuminate\Database\Eloquent\Model $model the root model
+     * @param string $path the requested column
+     * @param string $column the wrapped column
+     * @return string
+     */
+    private function inTimezone(EloquentBuilder $query, Model $model, string $path, string $column): string
+    {
+        $timezone = $this->timezone();
+
+        if (is_null($timezone)) {
+            return $column;
+        }
+
+        [$owner, $name] = $this->columnOwner($model, $path);
+        $type = strtolower(Schema::connection($owner->getConnectionName())->getColumnType($owner->getTable(), $name));
+        $storage = config('vifrost.dataset.storage_timezone') ?? config('app.timezone', 'UTC');
+        $connection = $query->getConnection();
+        $driver = $connection->getDriverName();
+
+        if ($driver === 'pgsql' && in_array($type, ['timestamptz', 'timestamp with time zone'], true)) {
+            return $column . ' AT TIME ZONE ' . $connection->getPdo()->quote($timezone);
+        }
+
+        if (! in_array($type, ['timestamp', 'timestamp without time zone', 'datetime'], true) || $timezone === $storage) {
+            return $column;
+        }
+
+        return match ($driver) {
+            'pgsql' => '(' . $column . ' AT TIME ZONE ' . $connection->getPdo()->quote($storage) . ') AT TIME ZONE '
+                . $connection->getPdo()->quote($timezone),
+            'mysql', 'mariadb' => $this->convertTz($connection, $column, $storage, $timezone),
+            default => throw InvalidDatasetQuery::malformed("Time zones are not supported on {$driver}."),
+        };
+    }
+
+    /**
+     * MySQL's CONVERT_TZ() of a column, which needs the server's time zone tables: without them it
+     * returns null for every row, so they are checked first.
+     *
+     * @param \Illuminate\Database\Connection $connection
+     * @param string $column the wrapped column
+     * @param string $from
+     * @param string $to
+     * @return string
+     */
+    private function convertTz($connection, string $column, string $from, string $to): string
+    {
+        $probe = $connection->selectOne('SELECT CONVERT_TZ(?, ?, ?) AS converted', ['2000-01-01 00:00:00', $from, $to]);
+
+        if (is_null($probe->converted)) {
+            throw new LogicException(
+                "The database cannot convert from {$from} to {$to}: load its time zone tables (mysql_tzinfo_to_sql)."
+            );
+        }
+
+        $pdo = $connection->getPdo();
+
+        return 'CONVERT_TZ(' . $column . ', ' . $pdo->quote($from) . ', ' . $pdo->quote($to) . ')';
+    }
+
+    /**
+     * The time zone date periods are read in: ?tz=, else config('vifrost.dataset.timezone').
+     *
+     * @return string|null
+     */
+    private function timezone(): ?string
+    {
+        $requested = $this->request->query('tz');
+        $timezone = $requested ?? config('vifrost.dataset.timezone');
+
+        if (is_null($timezone) || $timezone === '') {
+            return null;
+        }
+
+        if (! is_string($timezone) || ! in_array($timezone, DateTimeZone::listIdentifiers(), true)) {
+            if (is_null($requested)) {
+                throw new LogicException("config('vifrost.dataset.timezone') is not a time zone: {$timezone}.");
+            }
+            throw InvalidDatasetQuery::malformed('?tz= must be a time zone identifier, e.g. America/New_York.');
+        }
+
+        return $timezone;
+    }
+
+    /**
+     * The model a requested column belongs to, and the column's name on it.
+     *
+     * @param \Illuminate\Database\Eloquent\Model $model the root model
+     * @param string $path
+     * @return array{0: \Illuminate\Database\Eloquent\Model, 1: string}
+     */
+    private function columnOwner(Model $model, string $path): array
+    {
+        if (! str_contains($path, '.')) {
+            return [$model, $path];
+        }
+
+        [$relation, $column] = explode('.', $path, 2);
+
+        return [DatasetRules::relation($model, $relation)->getRelated(), $column];
     }
 
     /**
