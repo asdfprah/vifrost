@@ -39,6 +39,13 @@ class OrderController
     public static array $aggregates = [];
 
     /**
+     * Rules added to allowedDataset() as given, to check how unknown ones are reported.
+     *
+     * @var array
+     */
+    public static array $extra = [];
+
+    /**
      * Makes every query of the root table sleep, to exceed a statement timeout.
      *
      * @var bool
@@ -62,6 +69,7 @@ class OrderController
         self::$has = ['items', 'items.refunds'];
         self::$aggregates = ['count', 'sum', 'avg', 'min', 'max'];
         self::$slow = false;
+        self::$extra = [];
     }
 
     /**
@@ -84,42 +92,20 @@ class OrderController
             ->allowedFilters([])
             ->allowedIncludes(['customer', 'items'])
             ->allowedSorts(['id'])
-            ->allowedColumns($this->allowedColumns())
-            ->allowedJoins($this->allowedJoins())
-            ->allowedHas($this->allowedHas())
-            ->allowedAggregates($this->allowedAggregates());
+            ->allowedDataset($this->allowedDataset());
     }
 
     /**
      * @return array
      */
-    private function allowedColumns(): array
+    private function allowedDataset(): array
     {
-        return self::$columns;
-    }
-
-    /**
-     * @return array
-     */
-    private function allowedJoins(): array
-    {
-        return self::$joins;
-    }
-
-    /**
-     * @return array
-     */
-    private function allowedHas(): array
-    {
-        return self::$has;
-    }
-
-    /**
-     * @return array
-     */
-    private function allowedAggregates(): array
-    {
-        return self::$aggregates;
+        return [
+            'columns' => self::$columns,
+            'joins' => self::$joins,
+            'has' => self::$has,
+            'aggregates' => self::$aggregates,
+        ] + self::$extra;
     }
 
     /**

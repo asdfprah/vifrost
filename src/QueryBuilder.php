@@ -18,9 +18,8 @@ use Vifrost\Laravel\Dataset\StatementTimeout;
 
 /**
  * Spatie's query builder, plus datasets: a collection request with ?select=, ?aggregate= or ?group=
- * returns rows of the columns, joins and aggregates it asks for, as far as allowedColumns(),
- * allowedJoins(), allowedHas() and allowedAggregates() permit. Every other request behaves
- * exactly as Spatie's.
+ * returns rows of the columns, joins and aggregates it asks for, as far as allowedDataset()
+ * permits. Every other request behaves exactly as Spatie's.
  */
 class QueryBuilder extends SpatieQueryBuilder implements PaginatesItself
 {
@@ -87,55 +86,79 @@ class QueryBuilder extends SpatieQueryBuilder implements PaginatesItself
     }
 
     /**
-     * Columns a dataset may select, filter, group or aggregate: the model's own, dotted for the
-     * columns of a joined relation or of a has level.
+     * What a dataset may use, under these keys, each a list and each optional:
+     * - `columns`: columns to select, filter, group or aggregate; the model's own, dotted for
+     *   those of a joined relation or of a has level (`customer.name`, `items.price`).
+     * - `joins`: BelongsTo, HasOne, HasMany or BelongsToMany relations of the model.
+     * - `has`: relations to filter by with whereHas, dotted for nested ones, whose parent levels
+     *   must be allowed too.
+     * - `aggregates`: count, sum, avg, min or max.
+     * Without columns or aggregates there is no dataset.
+     *
+     * @param array $rules
+     * @return static
+     */
+    public function allowedDataset(array $rules): static
+    {
+        $this->datasetRules = DatasetRules::fromArray($rules);
+
+        return $this;
+    }
+
+    /**
+     * @deprecated Since 0.10.0; use allowedDataset(['columns' => [...]]).
      *
      * @param array|string $columns
      * @return static
      */
     public function allowedColumns($columns): static
     {
-        $this->datasetRules->columns = is_array($columns) ? $columns : func_get_args();
-
-        return $this;
+        return $this->allowDatasetRule('columns', is_array($columns) ? $columns : func_get_args());
     }
 
     /**
-     * Relations a dataset may join: BelongsTo, HasOne, HasMany or BelongsToMany relations of the model.
+     * @deprecated Since 0.10.0; use allowedDataset(['joins' => [...]]).
      *
      * @param array|string $relations
      * @return static
      */
     public function allowedJoins($relations): static
     {
-        $this->datasetRules->joins = is_array($relations) ? $relations : func_get_args();
-
-        return $this;
+        return $this->allowDatasetRule('joins', is_array($relations) ? $relations : func_get_args());
     }
 
     /**
-     * Relations a dataset may filter by with whereHas/whereDoesntHave, dotted for nested ones,
-     * whose parent levels must be allowed too.
+     * @deprecated Since 0.10.0; use allowedDataset(['has' => [...]]).
      *
      * @param array|string $relations
      * @return static
      */
     public function allowedHas($relations): static
     {
-        $this->datasetRules->has = is_array($relations) ? $relations : func_get_args();
-
-        return $this;
+        return $this->allowDatasetRule('has', is_array($relations) ? $relations : func_get_args());
     }
 
     /**
-     * Aggregate functions a dataset may use: count, sum, avg, min or max.
+     * @deprecated Since 0.10.0; use allowedDataset(['aggregates' => [...]]).
      *
      * @param array|string $functions
      * @return static
      */
     public function allowedAggregates($functions): static
     {
-        $this->datasetRules->aggregates = is_array($functions) ? $functions : func_get_args();
+        return $this->allowDatasetRule('aggregates', is_array($functions) ? $functions : func_get_args());
+    }
+
+    /**
+     * Sets one rule of the dataset, keeping the others.
+     *
+     * @param string $rule columns, joins, has or aggregates
+     * @param array $values
+     * @return static
+     */
+    private function allowDatasetRule(string $rule, array $values): static
+    {
+        $this->datasetRules->{$rule} = array_values($values);
 
         return $this;
     }

@@ -49,45 +49,22 @@ class DummyCode:modelController extends Controller
     }
 
     /**
-     * Columns a dataset of DummyCode:model may select, filter, group or aggregate, dotted for the
-     * columns of a joined or has relation (e.g. 'category.name'). A dataset is a request to index()
-     * with ?select= or ?aggregate=; while this and allowedAggregates() are empty, there is none.
+     * Dataset of DummyCode:model that index() returns for ?select=, ?aggregate= and ?group=:
+     * `columns` it may use, dotted for those of a joined or has relation (e.g. 'category.name'),
+     * BelongsTo, HasOne, HasMany and BelongsToMany relations it may join, relations it may filter
+     * by with whereHas (dotted for nested ones), and aggregates (count, sum, avg, min, max).
+     * Without columns or aggregates there is none.
      *
      * @return array
      */
-    private function allowedColumns(): array
+    private function allowedDataset(): array
     {
-        return [];
-    }
-
-    /**
-     * BelongsTo, HasOne, HasMany and BelongsToMany relations a dataset of DummyCode:model may join.
-     *
-     * @return array
-     */
-    private function allowedJoins(): array
-    {
-        return [];
-    }
-
-    /**
-     * Relations a dataset of DummyCode:model may filter by with whereHas, dotted for nested ones.
-     *
-     * @return array
-     */
-    private function allowedHas(): array
-    {
-        return [];
-    }
-
-    /**
-     * Aggregates a dataset of DummyCode:model may compute: count, sum, avg, min, max.
-     *
-     * @return array
-     */
-    private function allowedAggregates(): array
-    {
-        return [];
+        return [
+            'columns' => [],
+            'joins' => [],
+            'has' => [],
+            'aggregates' => [],
+        ];
     }
 
     /**
@@ -111,10 +88,7 @@ class DummyCode:modelController extends Controller
             ->allowedFilters($this->allowedFilters())
             ->allowedIncludes($this->allowedIncludes())
             ->allowedSorts(['id', 'created_at', 'updated_at'])
-            ->allowedColumns($this->allowedColumns())
-            ->allowedJoins($this->allowedJoins())
-            ->allowedHas($this->allowedHas())
-            ->allowedAggregates($this->allowedAggregates());
+            ->allowedDataset($this->allowedDataset());
     }
 
     /**

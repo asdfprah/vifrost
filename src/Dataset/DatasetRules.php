@@ -46,6 +46,34 @@ class DatasetRules
     public array $aggregates = [];
 
     /**
+     * Builds the rules of a controller's allowedDataset(): lists under `columns`, `joins`, `has`
+     * and `aggregates`, each optional.
+     *
+     * @param array $rules
+     * @return static
+     */
+    public static function fromArray(array $rules): static
+    {
+        $known = ['columns', 'joins', 'has', 'aggregates'];
+
+        foreach ($rules as $key => $value) {
+            if (! in_array($key, $known, true)) {
+                throw new LogicException("Dataset rule `{$key}` is unknown. Use any of: " . implode(', ', $known) . '.');
+            }
+            if (! is_array($value) || ! array_is_list($value)) {
+                throw new LogicException("Dataset rule `{$key}` must be a list.");
+            }
+        }
+
+        $instance = new static;
+        foreach ($known as $key) {
+            $instance->{$key} = array_values($rules[$key] ?? []);
+        }
+
+        return $instance;
+    }
+
+    /**
      * Whether any dataset can be built: at least one column or aggregate is allowed.
      *
      * @return bool

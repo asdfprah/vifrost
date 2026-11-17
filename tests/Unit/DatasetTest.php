@@ -347,6 +347,7 @@ it('reports a mistake in the rules as an error of the app', function (callable $
     'a hidden column' => [fn () => OrderController::$columns[] = 'customer.api_token'],
     'a nested has without its parent' => [fn () => OrderController::$has = ['items.refunds']],
     'a join that is not BelongsTo, HasOne, HasMany or BelongsToMany' => [fn () => OrderController::$joins[] = 'refunds'],
+    'a rule that does not exist' => [fn () => OrderController::$extra = ['filters' => ['status']]],
 ]);
 
 it('says datasets are not enabled when no column or aggregate is allowed', function () {

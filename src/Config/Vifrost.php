@@ -38,8 +38,8 @@ return [
     ],
 
     // Datasets: rows of selected columns, joins and aggregates requested through a model's
-    // index route. Each part is enabled per controller with the allowedColumns/Joins/Has/
-    // Aggregates methods of its query(); these options only bound what an enabled one can do.
+    // index route. Each part is enabled per controller in the allowedDataset() of its query();
+    // these options only bound what an enabled one can do.
     'dataset' => [
         // Max rows per request. A dataset always requires ?limit=; exceeding it is a 422.
         'max_limit' => 1000,
