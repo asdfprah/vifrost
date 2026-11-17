@@ -60,7 +60,7 @@ class OrderController
     public static function reset(): void
     {
         self::$columns = [
-            'status', 'amount', 'placed_on', 'customer_id',
+            'status', 'amount', 'placed_on', 'placed_at', 'confirmed_at', 'customer_id',
             'customer.name', 'items.kind', 'items.cost',
             'watchers.name', 'primaryWatchers.name', 'expensiveItems.cost',
             'items.refunds.code',

@@ -55,6 +55,11 @@ return [
         ],
         // Max nesting of whereHas/whereDoesntHave, counting the first level. Deeper is a 400.
         'max_has_depth' => 3,
+        // Time zone date periods of ?group= are computed in, e.g. 'America/New_York'; a request
+        // overrides it with ?tz=. null groups values as the database returns them.
+        'timezone' => null,
+        // Time zone the app stores datetimes without a zone in; null means config('app.timezone').
+        'storage_timezone' => null,
     ],
 
     'relations'   => [
